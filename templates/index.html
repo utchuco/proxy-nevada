@@ -3,32 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resultado - {{ placa }}</title>
+    <title>Nevada - Consulta de Frota</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h2>Placa: {{ placa }}</h2>
-        <p><strong>Cliente:</strong> {{ cliente }}</p>
-        
-        <hr style="margin: 20px 0; border: 1px solid #eee;">
-        
-        <h3>Últimos Checklists / Chamados</h3>
-        {% if checklists %}
-            <ul style="list-style-type: none; padding: 0; text-align: left;">
-            {% for item in checklists %}
-                <li style="background: #f9f9f9; margin-bottom: 10px; padding: 12px; border-radius: 4px; border-left: 5px solid #0056b3;">
-                    <strong>Chamado: {{ item.numero }}</strong><br>
-                    <small style="color: #666;">Data: {{ item.data }} | Status: {{ item.status }}</small>
-                </li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p style="color: #666;">Nenhum histórico encontrado para esta placa.</p>
-        {% endif %}
-        
-        <br>
-        <a href="/" style="display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #ccc; color: #333; text-decoration: none; border-radius: 4px; font-weight: bold;">Nova Busca</a>
+        <h2>Locadora Nevada</h2>
+        <p>Digite a placa do veículo para consultar o cliente e checklists ativos.</p>
+        <form action="/buscar" method="POST">
+            <input type="text" name="placa" placeholder="EX: ABC-1234" required>
+            <button type="submit">Buscar Veículo</button>
+        </form>
     </div>
 </body>
 </html>
