@@ -57,7 +57,7 @@ def buscar():
         
         # Faz a requisição de busca pela placa
         # Obs: Ajuste o final da URL (/veiculos?placa=) se o endpoint exato for outro
-        url_busca = f"{API_URL}/veiculos?placa={placa}"
+        url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = requests.get(url_busca, headers=headers)
         response.raise_for_status()
         
