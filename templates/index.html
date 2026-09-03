@@ -10,6 +10,14 @@
     <div class="container">
         <h2>Locadora Nevada</h2>
         <p>Digite a placa do veículo para consultar o cliente e checklists ativos.</p>
+        
+        <!-- Visor de Erros -->
+        {% if erro %}
+            <div style="background-color: #ffdddd; color: #cc0000; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+                <strong>Atenção:</strong> {{ erro }}
+            </div>
+        {% endif %}
+
         <form action="/buscar" method="POST">
             <input type="text" name="placa" placeholder="EX: ABC-1234" required>
             <button type="submit">Buscar Veículo</button>
