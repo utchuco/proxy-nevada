@@ -1,100 +1,83 @@
 import os
-import requests
 import base64
+import requests
 from flask import Flask, render_template, request
 from dotenv import load_dotenv
 
+# Carrega as variáveis do arquivo .env
 load_dotenv()
 
 app = Flask(__name__)
 
-CLIENT_ID = os.getenv('BLUEFLEET_CLIENT_ID')
-CLIENT_SECRET = os.getenv('BLUEFLEET_CLIENT_SECRET')
+# Configurações da Blue Fleet (Produção)
+CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
+CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
+AUTH_URL = "https://auth.bluefleet.com.br/connect/token"
+API_URL = "https://api.bluefleet.com.br"
 
-# URL base mapeada pelo arquivo do Swagger
-API_BASE_URL = "https://api.bluefleet.com.br"
+def get_access_token():
+    """Gera o token OAuth2.0 codificando Client ID e Secret em Base64"""
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise ValueError("Credenciais ausentes no servidor (verifique o arquivo .env)")
 
-def gerar_token_bluefleet():
-    """
-    Gera o Token usando Basic Auth com Base64 conforme documentação da Blue Fleet.
-    """
-    url_auth = "https://auth.bluefleet.com.br/connect/token"
-    
-    # Junta ID e Secret e converte para Base64
-    credenciais = f"{CLIENT_ID}:{CLIENT_SECRET}".encode("utf-8")
-    credenciais_b64 = base64.b64encode(credenciais).decode("utf-8")
+    credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
     
     headers = {
-        "Authorization": f"Basic {credenciais_b64}",
-        "Accept": "application/json",
+        "Authorization": f"Basic {encoded_credentials}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
+    data = {"grant_type": "client_credentials"}
     
-    payload = "grant_type=client_credentials"
+    response = requests.post(AUTH_URL, headers=headers, data=data)
+    response.raise_for_status()  # Lança erro se a senha estiver errada
     
-    try:
-        response = requests.post(url_auth, headers=headers, data=payload)
-        response.raise_for_status()
-        return response.json().get("access_token")
-    except Exception as e:
-        print(f"Erro ao gerar token: {e}")
-        return None
+    return response.json().get("access_token")
 
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/buscar', methods=['POST'])
+@app.route("/buscar", methods=["POST"])
 def buscar():
-    placa = request.form.get('placa').upper().strip()
+    placa = request.form.get("placa", "").strip().upper()
     
-    # 1. Gera a chave de acesso
-    token = gerar_token_bluefleet()
-    
-    # Se ainda não temos o link exato de autenticação deles, carregamos dados de teste visual
-    if not token:
-        return render_template('resultado.html', 
-                               placa=placa, 
-                               cliente="(Aguardando configuração do Token)", 
-                               checklists=[{"numero": "Teste-01", "data": "2026-09-03", "status": "Simulação de Tela"}])
+    if not placa:
+        return render_template("index.html", erro="Por favor, digite uma placa válida.")
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
     try:
-        # 2. Busca o ID do Cliente atrelado ao veículo
-        # Rota definida no Swagger da Blue Fleet
-        resp_veiculo = requests.get(f"{API_BASE_URL}/vehicle?LicensePlate={placa}", headers=headers)
-        dados_veiculo = resp_veiculo.json()
+        # 1. Obtém a permissão
+        token = get_access_token()
         
-        # Simulando a extração do ID (depende da estrutura exata da resposta)
-        cliente_id = dados_veiculo[0].get("customerId") if dados_veiculo else None
+        # 2. Prepara a busca
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
         
-        cliente_nome = "Não identificado"
-        if cliente_id:
-            # Busca o nome real do cliente na rota /commercial/customer/{customerId}
-            resp_cliente = requests.get(f"{API_BASE_URL}/commercial/customer/{cliente_id}", headers=headers)
-            cliente_nome = resp_cliente.json().get("name", "Não identificado")
-            
-        # 3. Busca o histórico de checklists e chamados daquela placa
-        resp_checklists = requests.get(f"{API_BASE_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
-        dados_checklists = resp_checklists.json()
+        # Faz a requisição de busca pela placa
+        # Obs: Ajuste o final da URL (/veiculos?placa=) se o endpoint exato for outro
+        url_busca = f"{API_URL}/veiculos?placa={placa}"
+        response = requests.get(url_busca, headers=headers)
+        response.raise_for_status()
         
-        # Mapeando os resultados para enviar para a tela
-        checklists_formatados = []
-        for item in dados_checklists.get("items", [])[:5]: # Pegando apenas os 5 últimos
-            checklists_formatados.append({
-                "numero": item.get("contractItemRequestNumber", "Sem número"),
-                "data": item.get("initialDate", "Sem data")[:10], # Pega só a parte da data (YYYY-MM-DD)
-                "status": "Registrado"
-            })
-            
-        return render_template('resultado.html', placa=placa, cliente=cliente_nome, checklists=checklists_formatados)
+        dados = response.json()
         
-    except Exception as e:
-        return f"Erro ao comunicar com a API: {str(e)}"
+        # 3. Trava de segurança: verifica se a resposta veio vazia (Impede o "Erro 0")
+        if not dados or (isinstance(dados, list) and len(dados) == 0):
+            return render_template("index.html", erro=f"Nenhum veículo encontrado para a placa {placa}.")
+        
+        # 4. Extrai o veículo com segurança (pega o primeiro se for lista)
+        veiculo = dados[0] if isinstance(dados, list) else dados
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        return render_template("resultado.html", veiculo=veiculo)
+
+    except requests.exceptions.HTTPError as err_http:
+        # Erros de API (ex: 401 Não Autorizado, 404 Não Encontrado)
+        return render_template("index.html", erro=f"Falha na API: {err_http}")
+    except Exception as e:
+        # Qualquer outro erro interno
+        return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
