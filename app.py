@@ -16,19 +16,15 @@ API_URL = "https://api.bluefleet.com.br"
 def get_access_token():
     if not CLIENT_ID or not CLIENT_SECRET:
         raise ValueError("Credenciais ausentes no servidor (verifique o arquivo .env)")
-
     credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
     encoded_credentials = base64.b64encode(credentials.encode()).decode()
-    
     headers = {
         "Authorization": f"Basic {encoded_credentials}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
     data = {"grant_type": "client_credentials"}
-    
     response = requests.post(AUTH_URL, headers=headers, data=data)
     response.raise_for_status()
-    
     return response.json().get("access_token")
 
 @app.route("/")
@@ -38,7 +34,6 @@ def index():
 @app.route("/buscar", methods=["POST"])
 def buscar():
     placa = request.form.get("placa", "").strip().upper()
-    
     if not placa:
         return render_template("index.html", erro="Por favor, digite uma placa válida.")
 
@@ -52,48 +47,39 @@ def buscar():
             "Accept": "application/json"
         }
         
-        # 1. Busca o veículo principal
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = requests.get(url_busca, headers=headers)
         response.raise_for_status()
         
         lista_veiculos = response.json().get("data", [])
-        
         if not lista_veiculos:
             return render_template("index.html", erro=f"Veículo não encontrado para a placa {placa}.")
         
         veiculo = lista_veiculos[0]
         veiculo_titular = None
+        ocorrencia_atual = None  # Nova variável para guardar a ocorrência
 
-        # 2. Se for Reserva (Status 14), busca as ocorrências e acha o titular atual
         if veiculo.get("vehicleStatusId") == 14:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
-                    
                     if ocorrencias:
-                        # O SEGREDO: Ordena as ocorrências da data mais recente para a mais antiga
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                        
-                        # Vasculha as ocorrências começando pela mais nova
                         for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
-                            
-                            # Ignora se a placa for vazia ou for a própria placa do carro reserva
                             if placa_titular and placa_titular != placa:
-                                
-                                # Achou uma placa diferente! Busca a ficha do titular para pegar o cliente
+                                ocorrencia_atual = oc  # Salva o pacote da ocorrência inteira
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
                                     lista_titular = r_titular.json().get("data", [])
                                     if lista_titular:
                                         veiculo_titular = lista_titular[0]
-                                        break # Encontrou com sucesso, encerra a busca nas ocorrências antigas
+                                        break
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, ocorrencia_atual=ocorrencia_atual)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")

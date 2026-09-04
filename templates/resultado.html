@@ -23,7 +23,6 @@
             
             <h4 style="margin-bottom: 10px; color: #333;">📋 Dados da Locação</h4>
             
-            <!-- Inteligência do Carro Reserva -->
             {% if veiculo_titular %}
                 <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 5px; border-left: 5px solid #ffeeba; margin-bottom: 15px;">
                     <strong>⚠️ VEÍCULO SUBSTITUTO</strong><br><br>
@@ -36,7 +35,6 @@
                         {% endif %}
                     </strong>
                 </div>
-            <!-- Carro Padrão -->
             {% elif veiculo.contract and veiculo.contract.customer %}
                 <p><strong>Cliente:</strong> {{ veiculo.contract.customer.tradingName }}</p>
             {% else %}
@@ -47,6 +45,14 @@
         </div>
 
         <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Fazer Nova Busca</a>
+        
+        <!-- Diagnóstico do Checklist -->
+        {% if ocorrencia_atual %}
+        <details style="margin-top: 30px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;">
+            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico: Ocorrência</summary>
+            <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px; margin-top: 10px;">{{ ocorrencia_atual | tojson(indent=4) }}</pre>
+        </details>
+        {% endif %}
     </div>
 </body>
 </html>
