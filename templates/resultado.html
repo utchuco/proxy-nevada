@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultado - Nevada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Veículo Encontrado! 🚗</h2>
+        
+        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h4>Dados recebidos da Blue Fleet:</h4>
+            <!-- Isso vai imprimir todos os dados do veículo em formato "hacker" para descobrirmos os nomes dos campos -->
+            <pre style="font-size: 13px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px;">{{ veiculo | tojson(indent=4) }}</pre>
+        </div>
+
+        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Nova Busca</a>
+    </div>
+</body>
+</html>
