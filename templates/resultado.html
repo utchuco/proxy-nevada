@@ -46,11 +46,11 @@
 
         <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Fazer Nova Busca</a>
         
-        <!-- Diagnóstico do Checklist -->
-        {% if ocorrencia_atual %}
+        <!-- Diagnóstico de Arquivos -->
+        {% if arquivos_ocorrencia %}
         <details style="margin-top: 30px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;">
-            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico: Ocorrência</summary>
-            <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px; margin-top: 10px;">{{ ocorrencia_atual | tojson(indent=4) }}</pre>
+            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico: Arquivos/Checklist</summary>
+            <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px; margin-top: 10px;">{{ arquivos_ocorrencia | tojson(indent=4) }}</pre>
         </details>
         {% endif %}
     </div>

@@ -57,7 +57,8 @@ def buscar():
         
         veiculo = lista_veiculos[0]
         veiculo_titular = None
-        ocorrencia_atual = None  # Nova variável para guardar a ocorrência
+        ocorrencia_atual = None
+        arquivos_ocorrencia = None # Variável para pescar os arquivos/checklists
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -69,7 +70,18 @@ def buscar():
                         for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
                             if placa_titular and placa_titular != placa:
-                                ocorrencia_atual = oc  # Salva o pacote da ocorrência inteira
+                                ocorrencia_atual = oc
+                                
+                                # AQUI ENTRA A MÁGICA DOS ARQUIVOS
+                                req_id = oc.get("contractItemRequestId")
+                                if req_id:
+                                    try:
+                                        r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers)
+                                        if r_files.status_code == 200:
+                                            arquivos_ocorrencia = r_files.json()
+                                    except Exception:
+                                        pass
+                                
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
                                     lista_titular = r_titular.json().get("data", [])
@@ -79,7 +91,7 @@ def buscar():
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, ocorrencia_atual=ocorrencia_atual)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
