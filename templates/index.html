@@ -25,8 +25,10 @@
         {% endif %}
 
         <form id="formBusca" action="/buscar" method="POST" style="margin-top: 20px;">
-            <input type="text" name="placa" placeholder="Digite a placa" required 
-                   style="width: 100%; padding: 15px; margin-bottom: 15px; border: 2px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 18px; text-transform: uppercase; text-align: center;">
+            <!-- Input otimizado com autocapitalize e sem autocomplete -->
+            <input type="text" id="inputPlaca" name="placa" placeholder="ABC-1234" required 
+                   autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8"
+                   style="width: 100%; padding: 15px; margin-bottom: 15px; border: 2px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 22px; font-weight: bold; text-transform: uppercase; text-align: center; letter-spacing: 2px;">
             
             <button type="submit" id="btnBuscar" 
                     style="width: 100%; padding: 15px; background-color: #0056b3; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s;">
@@ -35,15 +37,21 @@
         </form>
     </div>
 
-    <!-- Script do Botão Inteligente -->
     <script>
+        // Máscara Automática da Placa
+        document.getElementById('inputPlaca').addEventListener('input', function (e) {
+            var valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (valor.length > 3) {
+                valor = valor.substring(0, 3) + '-' + valor.substring(3, 7);
+            }
+            e.target.value = valor;
+        });
+
+        // Botão Inteligente (Loading)
         document.getElementById('formBusca').addEventListener('submit', function() {
             var btn = document.getElementById('btnBuscar');
-            // Muda o texto
             btn.innerHTML = 'Buscando... ⏳';
-            // Muda a cor para cinza para indicar que está inativo
             btn.style.backgroundColor = '#6c757d';
-            // Remove o cursor de clique e impede que a pessoa clique de novo
             btn.style.pointerEvents = 'none';
         });
     </script>
