@@ -52,34 +52,42 @@
             <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
         </div>
 
-        <!-- Botão de Senha do CRLV -->
-        <hr style="margin: 20px 0; border: 1px solid #ddd;">
-        <div style="text-align: center; margin-top: 15px; margin-bottom: 25px;">
-            <h3>📄 Documento do Veículo (CRLV)</h3>
-            <p style="font-size: 14px; color: #666;">Área restrita. Digite a senha da frota para acessar.</p>
-            
-            <form action="/crlv" method="POST" target="_blank" style="display: flex; justify-content: center; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-                <input type="hidden" name="placa" value="{{ veiculo.licensePlate }}">
-                
-                <input type="password" name="senha" placeholder="Senha (ex: 1234)" inputmode="numeric" required 
-                       style="padding: 12px; border-radius: 5px; border: 1px solid #ccc; width: 150px; text-align: center; font-size: 16px;">
-                
-                <button type="submit" 
-                        style="padding: 12px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer;">
-                    Abrir CRLV
-                </button>
-            </form>
+        <!-- Botão Discreto do CRLV -->
+        <div style="margin-bottom: 20px;">
+            <button onclick="solicitarSenhaCrlv()" style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 50px; font-size: 14px; cursor: pointer; font-weight: bold;">
+                📄 Ver Documento (CRLV)
+            </button>
         </div>
+
+        <!-- Formulário Oculto que o JavaScript vai usar -->
+        <form id="formCrlv" action="/crlv" method="POST" target="_blank" style="display: none;">
+            <input type="hidden" name="placa" value="{{ veiculo.licensePlate }}">
+            <input type="hidden" name="senha" id="inputSenhaCrlv">
+        </form>
 
         <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; width: 100%; box-sizing: border-box;">Fazer Nova Busca</a>
         
         <!-- Diagnóstico do Espião de API -->
         {% if espiao_api %}
         <details style="margin-top: 30px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;">
-            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico: O que a Blue Fleet respondeu?</summary>
+            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico</summary>
             <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #ffeb3b; padding: 15px; border-radius: 5px; margin-top: 10px;">{{ espiao_api | tojson(indent=4) }}</pre>
         </details>
         {% endif %}
     </div>
+
+    <!-- Script da Janelinha de Senha -->
+    <script>
+        function solicitarSenhaCrlv() {
+            // Abre o pop-up nativo do celular
+            var senha = prompt("🔒 Acesso Restrito\nDigite a senha da frota (PIN):");
+            
+            // Se ele digitou algo e apertou OK
+            if (senha) {
+                document.getElementById('inputSenhaCrlv').value = senha;
+                document.getElementById('formCrlv').submit();
+            }
+        }
+    </script>
 </body>
 </html>
