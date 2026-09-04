@@ -1,7 +1,7 @@
 import os
 import base64
 import requests
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_file
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +10,6 @@ app = Flask(__name__)
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
-AUTH_URL = "https://auth.auth0.com/oauth/token" # Ajuste se for auth.bluefleet
 AUTH_URL = "https://auth.bluefleet.com.br/connect/token"
 API_URL = "https://api.bluefleet.com.br"
 
@@ -78,7 +77,6 @@ def buscar():
                                     url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
                                         r_files = requests.get(url_arquivos, headers=headers)
-                                        # Salvamos o status (ex: 200, 404, 500) e o texto que a API cuspiu
                                         espiao_api = {
                                             "status_http": r_files.status_code,
                                             "url_testada": url_arquivos,
@@ -105,6 +103,33 @@ def buscar():
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
+
+
+@app.route('/crlv', methods=['POST'])
+def acessar_crlv():
+    placa = request.form.get('placa')
+    senha = request.form.get('senha')
+    
+    # A senha da frota
+    if senha != '1234':
+        return "Acesso negado: Senha incorreta.", 403
+    
+    # Limpa a placa para buscar
+    placa_limpa = placa.replace('-', '').replace(' ', '').upper()
+    
+    # Ordem de busca: 2026 primeiro, depois 2025
+    pastas_busca = ['documentos/2026', 'documentos/2025']
+    
+    for pasta in pastas_busca:
+        if os.path.exists(pasta):
+            for arquivo in os.listdir(pasta):
+                nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
+                
+                if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
+                    caminho_completo = os.path.join(pasta, arquivo)
+                    return send_file(caminho_completo, mimetype='application/pdf')
+    
+    return f"Documento não encontrado para a placa {placa}.", 404
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

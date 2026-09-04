@@ -5,9 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalhes do Veículo - Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    <!-- Configurações de Aplicativo (PWA) -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#0056b3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nevada">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
 </head>
 <body>
-    <div class="container">
+    <div class="container" style="text-align: center;">
         <h2>🚗 Veículo Encontrado</h2>
         
         <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
@@ -44,7 +52,26 @@
             <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
         </div>
 
-        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Fazer Nova Busca</a>
+        <!-- Botão de Senha do CRLV -->
+        <hr style="margin: 20px 0; border: 1px solid #ddd;">
+        <div style="text-align: center; margin-top: 15px; margin-bottom: 25px;">
+            <h3>📄 Documento do Veículo (CRLV)</h3>
+            <p style="font-size: 14px; color: #666;">Área restrita. Digite a senha da frota para acessar.</p>
+            
+            <form action="/crlv" method="POST" target="_blank" style="display: flex; justify-content: center; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                <input type="hidden" name="placa" value="{{ veiculo.licensePlate }}">
+                
+                <input type="password" name="senha" placeholder="Senha (ex: 1234)" inputmode="numeric" required 
+                       style="padding: 12px; border-radius: 5px; border: 1px solid #ccc; width: 150px; text-align: center; font-size: 16px;">
+                
+                <button type="submit" 
+                        style="padding: 12px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer;">
+                    Abrir CRLV
+                </button>
+            </form>
+        </div>
+
+        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; width: 100%; box-sizing: border-box;">Fazer Nova Busca</a>
         
         <!-- Diagnóstico do Espião de API -->
         {% if espiao_api %}
