@@ -122,12 +122,15 @@ def acessar_crlv():
     
     for pasta in pastas_busca:
         if os.path.exists(pasta):
-            for arquivo in os.listdir(pasta):
-                nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
-                
-                if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
-                    caminho_completo = os.path.join(pasta, arquivo)
-                    return send_file(caminho_completo, mimetype='application/pdf')
+            # O os.walk vasculha a pasta principal e todas as subpastas lá dentro!
+            for raiz, subpastas, arquivos in os.walk(pasta):
+                for arquivo in arquivos:
+                    nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
+                    
+                    if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
+                        # Usa a 'raiz' atual onde o arquivo foi achado
+                        caminho_completo = os.path.join(raiz, arquivo)
+                        return send_file(caminho_completo, mimetype='application/pdf')
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
