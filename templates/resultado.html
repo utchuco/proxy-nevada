@@ -3,20 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resultado - Nevada</title>
+    <title>Detalhes do Veículo - Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h2>Veículo Encontrado! 🚗</h2>
+        <h2>🚗 Veículo Encontrado</h2>
         
         <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h4>Dados recebidos da Blue Fleet:</h4>
-            <!-- Isso vai imprimir todos os dados do veículo em formato "hacker" para descobrirmos os nomes dos campos -->
-            <pre style="font-size: 13px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px;">{{ veiculo | tojson(indent=4) }}</pre>
+            <h3 style="margin-top: 0; color: #0056b3;">Placa: {{ veiculo.licensePlate }}</h3>
+            
+            <p><strong>Montadora:</strong> {{ veiculo.automakerName }}</p>
+            <p><strong>Modelo:</strong> {{ veiculo.vehicleModelName }}</p>
+            <p><strong>Cor:</strong> {{ veiculo.vehicleColor }}</p>
+            <p><strong>Ano:</strong> {{ veiculo.manufactureYear }} / {{ veiculo.modelYear }}</p>
+            <p><strong>Chassi:</strong> {{ veiculo.chassis }}</p>
+            <p><strong>Status:</strong> <span style="background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ veiculo.vehicleStatusName }}</span></p>
+            
+            <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
+            
+            <h4 style="margin-bottom: 10px; color: #333;">📋 Dados da Locação</h4>
+            {% if veiculo.contract and veiculo.contract.customer %}
+                <p><strong>Cliente:</strong> {{ veiculo.contract.customer.tradingName }}</p>
+                <p><strong>CNPJ:</strong> {{ veiculo.contract.customer.registeredNumber }}</p>
+            {% else %}
+                <p><em>Sem contrato ativo vinculado no momento.</em></p>
+            {% endif %}
+            
+            <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
         </div>
 
-        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Nova Busca</a>
+        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Fazer Nova Busca</a>
     </div>
 </body>
 </html>
