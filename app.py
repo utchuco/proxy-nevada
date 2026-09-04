@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
+AUTH_URL = "https://auth.auth0.com/oauth/token" # Ajuste se for auth.bluefleet
 AUTH_URL = "https://auth.bluefleet.com.br/connect/token"
 API_URL = "https://api.bluefleet.com.br"
 
@@ -57,8 +58,8 @@ def buscar():
         
         veiculo = lista_veiculos[0]
         veiculo_titular = None
-        ocorrencia_atual = None
-        arquivos_ocorrencia = None # Variável para pescar os arquivos/checklists
+        arquivos_ocorrencia = None 
+        espiao_api = None # O nosso detetive
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -70,18 +71,25 @@ def buscar():
                         for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
                             if placa_titular and placa_titular != placa:
-                                ocorrencia_atual = oc
-                                
-                                # AQUI ENTRA A MÁGICA DOS ARQUIVOS
                                 req_id = oc.get("contractItemRequestId")
+                                
+                                # --- INÍCIO DA CAPTURA DO ESPIÃO ---
                                 if req_id:
+                                    url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
-                                        r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers)
+                                        r_files = requests.get(url_arquivos, headers=headers)
+                                        # Salvamos o status (ex: 200, 404, 500) e o texto que a API cuspiu
+                                        espiao_api = {
+                                            "status_http": r_files.status_code,
+                                            "url_testada": url_arquivos,
+                                            "resposta_bruta": r_files.text
+                                        }
                                         if r_files.status_code == 200:
                                             arquivos_ocorrencia = r_files.json()
-                                    except Exception:
-                                        pass
-                                
+                                    except Exception as e:
+                                        espiao_api = {"erro_interno_python": str(e)}
+                                # --- FIM DA CAPTURA ---
+
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
                                     lista_titular = r_titular.json().get("data", [])
@@ -91,7 +99,7 @@ def buscar():
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia, espiao_api=espiao_api)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
