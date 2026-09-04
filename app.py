@@ -52,7 +52,7 @@ def buscar():
             "Accept": "application/json"
         }
         
-        # 1ª Busca: Ficha técnica do veículo
+        # 1. Busca o veículo que o motorista digitou
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = requests.get(url_busca, headers=headers)
         response.raise_for_status()
@@ -63,31 +63,30 @@ def buscar():
             return render_template("index.html", erro=f"Veículo não encontrado para a placa {placa}.")
         
         veiculo = lista_veiculos[0]
-        
-        # Variáveis para guardar o resultado da nossa rede de pesca
-        dados_reserva = None
-        dados_ocorrencia = None
+        veiculo_titular = None
 
-        # Se for Status 14 (LOCADO VEÍCULO RESERVA), dispara a busca dupla
+        # 2. Se for Reserva (Status 14), busca a placa titular e o cliente dela
         if veiculo.get("vehicleStatusId") == 14:
-            
-            # Tentativa A: Rota de Reservas
-            try:
-                r_reserva = requests.get(f"{API_URL}/vehicle/reservation?licensePlate={placa}", headers=headers)
-                if r_reserva.status_code == 200:
-                    dados_reserva = r_reserva.json()
-            except Exception:
-                pass
-                
-            # Tentativa B: Rota de Ocorrências
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
-                    dados_ocorrencia = r_ocorrencia.json()
+                    ocorrencias = r_ocorrencia.json().get("data", [])
+                    if ocorrencias:
+                        # Pega a placa do carro titular que originou a ocorrência
+                        placa_titular = ocorrencias[0].get("licensePlate")
+                        
+                        # Se achou uma placa diferente do próprio reserva
+                        if placa_titular and placa_titular != placa:
+                            # Puxa a ficha completa do carro titular para sabermos quem é o cliente
+                            r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
+                            if r_titular.status_code == 200:
+                                lista_titular = r_titular.json().get("data", [])
+                                if lista_titular:
+                                    veiculo_titular = lista_titular[0]
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, dados_reserva=dados_reserva, dados_ocorrencia=dados_ocorrencia)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
