@@ -37,41 +37,57 @@ def index():
 
 @app.route("/buscar", methods=["POST"])
 def buscar():
-    # Pega a placa, tira espaços e deixa em maiúsculas
     placa = request.form.get("placa", "").strip().upper()
     
     if not placa:
         return render_template("index.html", erro="Por favor, digite uma placa válida.")
 
-    # Formatação automática: se tiver 7 caracteres sem hífen, adiciona o hífen no meio
     if len(placa) == 7 and "-" not in placa:
         placa = f"{placa[:3]}-{placa[3:]}"
 
     try:
         token = get_access_token()
-        
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json"
         }
         
+        # 1ª Busca: Ficha técnica do veículo
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = requests.get(url_busca, headers=headers)
         response.raise_for_status()
         
-        resposta_api = response.json()
+        lista_veiculos = response.json().get("data", [])
         
-        # Puxa apenas a gaveta "data" onde a Blue Fleet esconde os veículos
-        lista_veiculos = resposta_api.get("data", [])
-        
-        # Se a gaveta estiver vazia, avisa o motorista
         if not lista_veiculos:
             return render_template("index.html", erro=f"Veículo não encontrado para a placa {placa}.")
         
-        # Pega o veículo exato (o primeiro da lista)
         veiculo = lista_veiculos[0]
+        
+        # Variáveis para guardar o resultado da nossa rede de pesca
+        dados_reserva = None
+        dados_ocorrencia = None
 
-        return render_template("resultado.html", veiculo=veiculo)
+        # Se for Status 14 (LOCADO VEÍCULO RESERVA), dispara a busca dupla
+        if veiculo.get("vehicleStatusId") == 14:
+            
+            # Tentativa A: Rota de Reservas
+            try:
+                r_reserva = requests.get(f"{API_URL}/vehicle/reservation?licensePlate={placa}", headers=headers)
+                if r_reserva.status_code == 200:
+                    dados_reserva = r_reserva.json()
+            except Exception:
+                pass
+                
+            # Tentativa B: Rota de Ocorrências
+            try:
+                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
+                if r_ocorrencia.status_code == 200:
+                    dados_ocorrencia = r_ocorrencia.json()
+            except Exception:
+                pass
+
+        return render_template("resultado.html", veiculo=veiculo, dados_reserva=dados_reserva, dados_ocorrencia=dados_ocorrencia)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")

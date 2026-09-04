@@ -16,7 +16,6 @@
             <p><strong>Montadora:</strong> {{ veiculo.automakerName }}</p>
             <p><strong>Modelo:</strong> {{ veiculo.vehicleModelName }}</p>
             <p><strong>Cor:</strong> {{ veiculo.vehicleColor }}</p>
-            <p><strong>Ano:</strong> {{ veiculo.manufactureYear }} / {{ veiculo.modelYear }}</p>
             <p><strong>Status:</strong> <span style="background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ veiculo.vehicleStatusName }}</span></p>
             
             <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
@@ -25,18 +24,24 @@
             {% if veiculo.contract and veiculo.contract.customer %}
                 <p><strong>Cliente:</strong> {{ veiculo.contract.customer.tradingName }}</p>
             {% else %}
-                <p><em>Sem contrato ativo vinculado no momento.</em></p>
+                <p><em>Buscando amarração de contrato...</em></p>
             {% endif %}
             
-            <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
         </div>
 
-        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Fazer Nova Busca</a>
+        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Nova Busca</a>
         
-        <!-- Dropdown escondido para capturarmos os dados do carro substituto -->
         <details style="margin-top: 30px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;">
-            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico (Clique para expandir)</summary>
-            <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px; margin-top: 10px;">{{ veiculo | tojson(indent=4) }}</pre>
+            <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico Avançado</summary>
+            <pre style="font-size: 11px; overflow-x: auto; background: #222; color: #0f0; padding: 15px; border-radius: 5px; margin-top: 10px;">
+TENTATIVA A (Rota de Reservas):
+{{ dados_reserva | tojson(indent=4) if dados_reserva else 'Vazio' }}
+
+---------------------------------------------------
+
+TENTATIVA B (Rota de Ocorrências):
+{{ dados_ocorrencia | tojson(indent=4) if dados_ocorrencia else 'Vazio' }}
+            </pre>
         </details>
     </div>
 </body>
