@@ -52,7 +52,7 @@ def buscar():
             "Accept": "application/json"
         }
         
-        # 1. Busca o veículo que o motorista digitou
+        # 1. Busca o veículo principal
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = requests.get(url_busca, headers=headers)
         response.raise_for_status()
@@ -65,24 +65,31 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
 
-        # 2. Se for Reserva (Status 14), busca a placa titular e o cliente dela
+        # 2. Se for Reserva (Status 14), busca as ocorrências e acha o titular atual
         if veiculo.get("vehicleStatusId") == 14:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
+                    
                     if ocorrencias:
-                        # Pega a placa do carro titular que originou a ocorrência
-                        placa_titular = ocorrencias[0].get("licensePlate")
+                        # O SEGREDO: Ordena as ocorrências da data mais recente para a mais antiga
+                        ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                         
-                        # Se achou uma placa diferente do próprio reserva
-                        if placa_titular and placa_titular != placa:
-                            # Puxa a ficha completa do carro titular para sabermos quem é o cliente
-                            r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
-                            if r_titular.status_code == 200:
-                                lista_titular = r_titular.json().get("data", [])
-                                if lista_titular:
-                                    veiculo_titular = lista_titular[0]
+                        # Vasculha as ocorrências começando pela mais nova
+                        for oc in ocorrencias:
+                            placa_titular = oc.get("licensePlate")
+                            
+                            # Ignora se a placa for vazia ou for a própria placa do carro reserva
+                            if placa_titular and placa_titular != placa:
+                                
+                                # Achou uma placa diferente! Busca a ficha do titular para pegar o cliente
+                                r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
+                                if r_titular.status_code == 200:
+                                    lista_titular = r_titular.json().get("data", [])
+                                    if lista_titular:
+                                        veiculo_titular = lista_titular[0]
+                                        break # Encontrou com sucesso, encerra a busca nas ocorrências antigas
             except Exception:
                 pass
 
