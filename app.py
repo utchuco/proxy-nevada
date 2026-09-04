@@ -131,5 +131,49 @@ def acessar_crlv():
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
+@app.route('/upload-crlv', methods=['GET', 'POST'])
+def upload_crlv():
+    if request.method == 'POST':
+        senha = request.form.get('senha')
+        
+        # Senha super secreta para ninguém acessar essa tela além de você
+        if senha != 'admin123':
+            return "Acesso negado.", 403
+            
+        ano = request.form.get('ano')
+        arquivos = request.files.getlist('arquivos_pdf')
+        
+        # Cria a pasta do ano automaticamente se ela não existir
+        pasta_destino = f"documentos/{ano}"
+        os.makedirs(pasta_destino, exist_ok=True)
+        
+        contador = 0
+        for arquivo in arquivos:
+            if arquivo.filename.upper().endswith('.PDF'):
+                # Salva o arquivo na pasta correta na Oracle
+                caminho_salvar = os.path.join(pasta_destino, arquivo.filename)
+                arquivo.save(caminho_salvar)
+                contador += 1
+                
+        return f"<h2 style='color: green;'>Sucesso! {contador} arquivos salvos na pasta {ano}.</h2> <a href='/upload-crlv'>Voltar</a>"
+
+    # Se for GET, mostra a telinha de Upload direto no navegador
+    return '''
+    <div style="text-align: center; font-family: Arial; padding: 50px;">
+        <h2>📤 Painel de Upload - CRLV</h2>
+        <form method="POST" enctype="multipart/form-data" style="display: inline-block; text-align: left; background: #f4f4f4; padding: 20px; border-radius: 10px;">
+            <p><b>Senha de Admin:</b><br> <input type="password" name="senha" required style="padding: 8px; width: 100%;"></p>
+            <p><b>Ano do Documento:</b><br> 
+                <select name="ano" style="padding: 8px; width: 100%;">
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                </select>
+            </p>
+            <p><b>Selecione os PDFs:</b><br> <input type="file" name="arquivos_pdf" multiple accept=".pdf" style="padding: 8px;"></p>
+            <button type="submit" style="padding: 10px 20px; background: #0056b3; color: white; border: none; border-radius: 5px; cursor: pointer;">Fazer Upload</button>
+        </form>
+    </div>
+    '''
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
