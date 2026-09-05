@@ -1,4 +1,5 @@
 import os
+import json
 import base64
 import requests
 from flask import Flask, render_template, request, send_file, jsonify
@@ -58,7 +59,7 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        espiao_api = None # O nosso detetive
+        espiao_api = None 
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -72,7 +73,6 @@ def buscar():
                             if placa_titular and placa_titular != placa:
                                 req_id = oc.get("contractItemRequestId")
                                 
-                                # --- INÍCIO DA CAPTURA DO ESPIÃO ---
                                 if req_id:
                                     url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
@@ -86,7 +86,6 @@ def buscar():
                                             arquivos_ocorrencia = r_files.json()
                                     except Exception as e:
                                         espiao_api = {"erro_interno_python": str(e)}
-                                # --- FIM DA CAPTURA ---
 
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
@@ -131,25 +130,18 @@ def acessar_crlv():
     placa = request.form.get('placa')
     senha = request.form.get('senha')
     
-    # A senha da frota
     if senha != '1234':
         return "Acesso negado: Senha incorreta.", 403
     
-    # Limpa a placa para buscar
     placa_limpa = placa.replace('-', '').replace(' ', '').upper()
-    
-    # Ordem de busca: 2026 primeiro, depois 2025
     pastas_busca = ['documentos/2026', 'documentos/2025']
     
     for pasta in pastas_busca:
         if os.path.exists(pasta):
-            # O os.walk vasculha a pasta principal e todas as subpastas lá dentro!
             for raiz, subpastas, arquivos in os.walk(pasta):
                 for arquivo in arquivos:
                     nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
-                    
                     if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
-                        # Usa a 'raiz' atual onde o arquivo foi achado
                         caminho_completo = os.path.join(raiz, arquivo)
                         return send_file(caminho_completo, mimetype='application/pdf')
     
@@ -157,30 +149,27 @@ def acessar_crlv():
 
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
-    busca = request.args.get("q", "").strip().upper()
-    
+    busca = request.args.get("q", "").strip().upper().replace("-", "")
     if len(busca) < 3:
         return jsonify({"placas": []})
         
     try:
-        token = get_access_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json"
-        }
+        # Lê direto do arquivo de texto deixado pelo robô da madrugada
+        caminho_cache = os.path.join(os.path.dirname(__file__), 'placas_cache.json')
         
-        url_busca = f"{API_URL}/vehicle?LicensePlate={busca}&Count=10"
-        response = requests.get(url_busca, headers=headers)
-        response.raise_for_status()
+        if os.path.exists(caminho_cache):
+            with open(caminho_cache, 'r', encoding='utf-8') as f:
+                cache_frota = json.load(f)
+        else:
+            cache_frota = []
+            
+        placas_filtradas = [placa for placa in cache_frota if placa.replace("-", "").startswith(busca)]
+        placas_filtradas.sort()
         
-        dados = response.json().get("data", [])
-        
-        placas = list(set([v.get("licensePlate") for v in dados if v.get("licensePlate")]))
-        
-        return jsonify({"placas": placas})
+        return jsonify({"placas": placas_filtradas[:10]})
         
     except Exception as e:
-        print(f"Erro na busca de sugestões: {e}")
+        print(f"Erro ao ler cache de sugestões: {e}")
         return jsonify({"placas": []})
 
 if __name__ == "__main__":
