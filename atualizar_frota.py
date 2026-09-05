@@ -14,7 +14,7 @@ API_URL = "https://api.bluefleet.com.br"
 ARQUIVO_CACHE = os.path.join(DIRETORIO_BASE, "placas_cache.json")
 
 def atualizar_cache():
-    print("Iniciando atualização do cache de frota...")
+    print("Iniciando extração profunda da frota...")
     try:
         # 1. Pegar o Token
         credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
@@ -23,37 +23,41 @@ def atualizar_cache():
             "Authorization": f"Basic {encoded_credentials}",
             "Content-Type": "application/x-www-form-urlencoded"
         }
-        res_auth = requests.post(AUTH_URL, headers=headers_auth, data={"grant_type": "client_credentials"})
+        res_auth = requests.post(AUTH_URL, headers_auth, data={"grant_type": "client_credentials"})
         res_auth.raise_for_status()
         token = res_auth.json().get("access_token")
 
-        # 2. Baixar a Frota com Paginação (Loop)
         headers_api = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         todas_placas = set()
-        offset = 0
+        
+        # O parâmetro da Blue Fleet age como Página, então vamos incrementar de 1 em 1
+        parametro_offset = 0 
         
         while True:
-            # O parâmetro Offset permite pular os registros já lidos
-            url_busca = f"{API_URL}/vehicle?Offset={offset}"
+            url_busca = f"{API_URL}/vehicle?Offset={parametro_offset}"
             res_api = requests.get(url_busca, headers=headers_api)
             res_api.raise_for_status()
             
             dados = res_api.json().get("data", [])
             
-            # Se a Blue Fleet retornar uma lista vazia, significa que já baixamos tudo
             if not dados:
                 break
                 
+            quantidade_antes = len(todas_placas)
+            
             for v in dados:
                 placa = v.get("licensePlate")
                 if placa:
                     todas_placas.add(placa)
             
-            # Aumenta o Offset pela quantidade de itens recebidos para pedir a próxima "página"
-            offset += len(dados)
-            print(f"Progresso: {len(todas_placas)} placas coletadas...")
+            # Se a quantidade de placas não aumentou após o lote, a API entregou repetidos.
+            if len(todas_placas) == quantidade_antes:
+                break
+                
+            parametro_offset += 1
+            print(f"Lote {parametro_offset} processado. Total acumulado: {len(todas_placas)} placas.")
 
-        # 3. Salvar no arquivo JSON local
+        # 2. Salvar no arquivo JSON local
         with open(ARQUIVO_CACHE, 'w', encoding='utf-8') as f:
             json.dump(list(todas_placas), f)
             
