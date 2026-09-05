@@ -23,14 +23,15 @@ def atualizar_cache():
             "Authorization": f"Basic {encoded_credentials}",
             "Content-Type": "application/x-www-form-urlencoded"
         }
-        res_auth = requests.post(AUTH_URL, headers_auth, data={"grant_type": "client_credentials"})
+        
+        # Correção aplicada: headers=headers_auth
+        res_auth = requests.post(AUTH_URL, headers=headers_auth, data={"grant_type": "client_credentials"})
         res_auth.raise_for_status()
         token = res_auth.json().get("access_token")
 
         headers_api = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         todas_placas = set()
         
-        # O parâmetro da Blue Fleet age como Página, então vamos incrementar de 1 em 1
         parametro_offset = 0 
         
         while True:
@@ -50,7 +51,6 @@ def atualizar_cache():
                 if placa:
                     todas_placas.add(placa)
             
-            # Se a quantidade de placas não aumentou após o lote, a API entregou repetidos.
             if len(todas_placas) == quantidade_antes:
                 break
                 
