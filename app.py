@@ -1,7 +1,7 @@
 import os
 import base64
 import requests
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -104,6 +104,27 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
+@app.route("/veiculos", methods=["GET"])
+def listar_todos_veiculos():
+    try:
+        token = get_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        url_lista = f"{API_URL}/vehicle?Count=100"
+        response = requests.get(url_lista, headers=headers)
+        response.raise_for_status()
+        
+        lista_veiculos = response.json().get("data", [])
+        
+        return render_template("lista.html", veiculos=lista_veiculos)
+
+    except requests.exceptions.HTTPError as err_http:
+        return render_template("index.html", erro=f"Falha na comunicação com Blue Fleet: {err_http}")
+    except Exception as e:
+        return render_template("index.html", erro=f"Erro interno do servidor: {str(e)}")
 
 @app.route('/crlv', methods=['POST'])
 def acessar_crlv():
@@ -133,6 +154,34 @@ def acessar_crlv():
                         return send_file(caminho_completo, mimetype='application/pdf')
     
     return f"Documento não encontrado para a placa {placa}.", 404
+
+@app.route("/api/veiculos/sugestoes", methods=["GET"])
+def api_sugestoes():
+    busca = request.args.get("q", "").strip().upper()
+    
+    if len(busca) < 3:
+        return jsonify({"placas": []})
+        
+    try:
+        token = get_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        url_busca = f"{API_URL}/vehicle?LicensePlate={busca}&Count=10"
+        response = requests.get(url_busca, headers=headers)
+        response.raise_for_status()
+        
+        dados = response.json().get("data", [])
+        
+        placas = list(set([v.get("licensePlate") for v in dados if v.get("licensePlate")]))
+        
+        return jsonify({"placas": placas})
+        
+    except Exception as e:
+        print(f"Erro na busca de sugestões: {e}")
+        return jsonify({"placas": []})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
