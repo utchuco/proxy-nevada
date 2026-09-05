@@ -6,7 +6,6 @@
     <title>Busca de Frota - Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     
-    <!-- Configurações de Aplicativo (PWA) -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#0056b3">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,14 +24,12 @@
         {% endif %}
 
         <form id="formBusca" action="/buscar" method="POST" style="margin-top: 20px;">
-            <!-- Input otimizado envolto em div para sugestões -->
             <div style="position: relative; margin-bottom: 15px;">
                 <input type="text" id="inputPlaca" name="placa" placeholder="ABC-1234" required 
                        autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8"
                        style="width: 100%; padding: 15px; border: 2px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 22px; font-weight: bold; text-transform: uppercase; text-align: center; letter-spacing: 2px;">
                 
-                <!-- A caixa da lista de sugestões (inicia escondida) -->
-                <ul id="listaSugestoes" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1000; list-style: none; padding: 0; margin: 5px 0 0 0; background: white; border: 1px solid #ccc; width: 100%; text-align: left; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto;">
+                <ul id="listaSugestoes" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1000; list-style: none; padding: 0; margin: 5px 0 0 0; background: white; border: 1px solid #ccc; width: 100%; text-align: left; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); max-height: 250px; overflow-y: auto;">
                 </ul>
             </div>
             
@@ -41,14 +38,6 @@
                 Buscar Veículo
             </button>
         </form>
-
-        <!-- Botão para listar toda a frota -->
-        <div>
-            <a href="/veiculos" 
-               style="display: inline-block; width: 100%; padding: 15px; background-color: #28a745; color: white; border-radius: 8px; font-size: 18px; font-weight: bold; text-decoration: none; transition: 0.3s; box-sizing: border-box;">
-               📋 Ver Frota Completa
-            </a>
-        </div>
     </div>
 
     <script>
@@ -56,14 +45,12 @@
         const listaSugestoes = document.getElementById('listaSugestoes');
 
         inputPlaca.addEventListener('input', async function (e) {
-            // Máscara Automática da Placa
             var valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             if (valor.length > 3) {
                 valor = valor.substring(0, 3) + '-' + valor.substring(3, 7);
             }
             e.target.value = valor;
 
-            // Busca de Sugestões na API interna
             if (valor.replace('-', '').length >= 3) { 
                 try {
                     const response = await fetch('/api/veiculos/sugestoes?q=' + valor);
@@ -84,7 +71,6 @@
                             li.style.fontWeight = 'bold';
                             li.style.color = '#333';
                             
-                            // Previne perda de foco ao clicar no item
                             li.onmousedown = function(event) {
                                 event.preventDefault(); 
                             };
@@ -108,14 +94,12 @@
             }
         });
 
-        // Esconde a lista de sugestões se o usuário clicar fora do input
         document.addEventListener('click', function(e) {
             if (e.target !== inputPlaca) {
                 listaSugestoes.style.display = 'none';
             }
         });
 
-        // Botão Inteligente (Loading)
         document.getElementById('formBusca').addEventListener('submit', function() {
             var btn = document.getElementById('btnBuscar');
             btn.innerHTML = 'Buscando... ⏳';

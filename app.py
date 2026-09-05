@@ -103,28 +103,6 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-@app.route("/veiculos", methods=["GET"])
-def listar_todos_veiculos():
-    try:
-        token = get_access_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json"
-        }
-        
-        url_lista = f"{API_URL}/vehicle?Count=100"
-        response = requests.get(url_lista, headers=headers)
-        response.raise_for_status()
-        
-        lista_veiculos = response.json().get("data", [])
-        
-        return render_template("lista.html", veiculos=lista_veiculos)
-
-    except requests.exceptions.HTTPError as err_http:
-        return render_template("index.html", erro=f"Falha na comunicação com Blue Fleet: {err_http}")
-    except Exception as e:
-        return render_template("index.html", erro=f"Erro interno do servidor: {str(e)}")
-
 @app.route('/crlv', methods=['POST'])
 def acessar_crlv():
     placa = request.form.get('placa')
@@ -154,7 +132,6 @@ def api_sugestoes():
         return jsonify({"placas": []})
         
     try:
-        # Lê direto do arquivo de texto deixado pelo robô da madrugada
         caminho_cache = os.path.join(os.path.dirname(__file__), 'placas_cache.json')
         
         if os.path.exists(caminho_cache):
@@ -166,7 +143,8 @@ def api_sugestoes():
         placas_filtradas = [placa for placa in cache_frota if placa.replace("-", "").startswith(busca)]
         placas_filtradas.sort()
         
-        return jsonify({"placas": placas_filtradas[:10]})
+        # Aumentado de 10 para 50 sugestões para garantir que todos os carros semelhantes apareçam
+        return jsonify({"placas": placas_filtradas[:50]})
         
     except Exception as e:
         print(f"Erro ao ler cache de sugestões: {e}")
