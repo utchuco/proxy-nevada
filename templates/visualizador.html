@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRLV - {{ placa }}</title>
+    <meta name="theme-color" content="#212529">
+</head>
+<body style="margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background-color: #f8f9fa; font-family: Arial, sans-serif;">
+    
+    <!-- Barra Superior -->
+    <div style="background-color: #212529; color: white; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;">
+        <div style="font-weight: bold; font-size: 16px; letter-spacing: 1px;">CRLV: {{ placa }}</div>
+        <div style="display: flex; gap: 10px;">
+            <button id="btnBaixar" style="background-color: #495057; color: white; border: none; padding: 8px 12px; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer;">
+                ⬇ Baixar
+            </button>
+            <button id="btnShare" style="background-color: #25D366; color: white; border: none; padding: 8px 12px; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer;">
+                📲 WhatsApp
+            </button>
+        </div>
+    </div>
+
+    <!-- Área de Carregamento e PDF -->
+    <div id="loading" style="flex: 1; display: flex; justify-content: center; align-items: center; font-size: 18px; color: #555; font-weight: bold; padding: 20px; text-align: center;">
+        Buscando documento no cofre... ⏳
+    </div>
+    
+    <iframe id="pdfFrame" style="flex: 1; border: none; width: 100%; display: none;"></iframe>
+
+    <script>
+        const placa = "{{ placa }}";
+        const senha = "{{ senha }}";
+        let pdfBlob = null;
+
+        // O Javascript busca o PDF no backend por debaixo dos panos
+        fetch('/api/crlv', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ placa: placa, senha: senha })
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text);
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            pdfBlob = blob;
+            const url = URL.createObjectURL(blob);
+            document.getElementById('pdfFrame').src = url;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('pdfFrame').style.display = 'block';
+        })
+        .catch(err => {
+            document.getElementById('loading').innerHTML = `<span style="color: #dc3545;">❌ ${err.message}</span>`;
+        });
+
+        // Lógica do botão de Baixar
+        document.getElementById('btnBaixar').onclick = () => {
+            if(!pdfBlob) return;
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `CRLV_${placa}.pdf`;
+            a.click();
+        };
+
+        // Lógica do botão do WhatsApp (Usa o compartilhamento nativo do celular)
+        document.getElementById('btnShare').onclick = async () => {
+            if(!pdfBlob) return;
+            const file = new File([pdfBlob], `CRLV_${placa}.pdf`, {type: 'application/pdf'});
+            
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: `CRLV ${placa}`,
+                        text: `Documento CRLV do veículo ${placa}`
+                    });
+                } catch(e) {
+                    console.log("Compartilhamento cancelado pelo usuário.");
+                }
+            } else {
+                alert("Seu celular não suporta envio direto. Use o botão de baixar e envie pela galeria.");
+            }
+        };
+    </script>
+</body>
+</html>

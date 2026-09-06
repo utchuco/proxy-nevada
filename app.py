@@ -1,13 +1,21 @@
 import os
-import json
 import base64
 import requests
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file
 from dotenv import load_dotenv
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# Configura o escudo Anti-Robô na memória do servidor
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://"
+)
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
@@ -59,7 +67,7 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        espiao_api = None 
+        espiao_api = None # O nosso detetive
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -73,6 +81,7 @@ def buscar():
                             if placa_titular and placa_titular != placa:
                                 req_id = oc.get("contractItemRequestId")
                                 
+                                # --- INÍCIO DA CAPTURA DO ESPIÃO ---
                                 if req_id:
                                     url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
@@ -86,6 +95,7 @@ def buscar():
                                             arquivos_ocorrencia = r_files.json()
                                     except Exception as e:
                                         espiao_api = {"erro_interno_python": str(e)}
+                                # --- FIM DA CAPTURA ---
 
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
@@ -103,14 +113,25 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-
+# NOVA ROTA: Entrega a moldura HTML do visualizador
 @app.route('/crlv', methods=['POST'])
-def acessar_crlv():
+def visualizar_crlv():
+    placa = request.form.get('placa')
+    senha = request.form.get('senha')
+    return render_template('visualizador.html', placa=placa, senha=senha)
+
+# ROTA ANTIGA BLINDADA: Entrega o PDF real apenas para o visualizador
+@app.route('/api/crlv', methods=['POST'])
+@limiter.limit("5 per minute")
+def api_crlv():
     placa = request.form.get('placa')
     senha = request.form.get('senha')
     
-    if senha != '1234':
-        return "Acesso negado: Senha incorreta.", 403
+    # Puxa a senha do cofre (.env)
+    senha_segura = os.getenv("PIN_CRLV", "BloqueioEmergenciaNevada2026")
+    
+    if senha != senha_segura:
+        return "Acesso negado: Senha incorreta ou limite de tentativas excedido.", 403
     
     placa_limpa = placa.replace('-', '').replace(' ', '').upper()
     pastas_busca = ['documentos/2026', 'documentos/2025']
@@ -120,36 +141,12 @@ def acessar_crlv():
             for raiz, subpastas, arquivos in os.walk(pasta):
                 for arquivo in arquivos:
                     nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
+                    
                     if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
                         caminho_completo = os.path.join(raiz, arquivo)
                         return send_file(caminho_completo, mimetype='application/pdf')
     
     return f"Documento não encontrado para a placa {placa}.", 404
-
-
-@app.route("/api/veiculos/sugestoes", methods=["GET"])
-def api_sugestoes():
-    busca = request.args.get("q", "").strip().upper().replace("-", "")
-    if len(busca) < 3:
-        return jsonify({"placas": []})
-        
-    try:
-        caminho_cache = os.path.join(os.path.dirname(__file__), 'placas_cache.json')
-        
-        if os.path.exists(caminho_cache):
-            with open(caminho_cache, 'r', encoding='utf-8') as f:
-                cache_frota = json.load(f)
-        else:
-            cache_frota = []
-            
-        placas_filtradas = [placa for placa in cache_frota if placa.replace("-", "").startswith(busca)]
-        placas_filtradas.sort()
-        
-        return jsonify({"placas": placas_filtradas[:50]})
-        
-    except Exception as e:
-        print(f"Erro ao ler cache de sugestões: {e}")
-        return jsonify({"placas": []})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
