@@ -1,13 +1,21 @@
 import os
-import json
 import base64
 import requests
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file
 from dotenv import load_dotenv
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# Configura o escudo Anti-Robô na memória do servidor
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://"
+)
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
@@ -104,14 +112,21 @@ def buscar():
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
 @app.route('/crlv', methods=['POST'])
+@limiter.limit("5 per minute")
 def acessar_crlv():
     placa = request.form.get('placa')
     senha = request.form.get('senha')
     
-    if senha != '1234':
-        return "Acesso negado: Senha incorreta.", 403
+    # Puxa a senha do cofre (.env). Se o arquivo falhar, usa a senha de emergência
+    senha_segura = os.getenv("PIN_CRLV", "BloqueioEmergenciaNevada2026")
     
+    if senha != senha_segura:
+        return "Acesso negado: Senha incorreta ou limite de tentativas excedido.", 403
+    
+    # Limpa a placa para buscar
     placa_limpa = placa.replace('-', '').replace(' ', '').upper()
+    
+    # Ordem de busca: 2026 primeiro, depois 2025
     pastas_busca = ['documentos/2026', 'documentos/2025']
     
     for pasta in pastas_busca:
@@ -119,36 +134,12 @@ def acessar_crlv():
             for raiz, subpastas, arquivos in os.walk(pasta):
                 for arquivo in arquivos:
                     nome_arquivo_limpo = arquivo.replace('-', '').replace(' ', '').upper()
+                    
                     if placa_limpa in nome_arquivo_limpo and arquivo.upper().endswith('.PDF'):
                         caminho_completo = os.path.join(raiz, arquivo)
                         return send_file(caminho_completo, mimetype='application/pdf')
     
     return f"Documento não encontrado para a placa {placa}.", 404
-
-@app.route("/api/veiculos/sugestoes", methods=["GET"])
-def api_sugestoes():
-    busca = request.args.get("q", "").strip().upper().replace("-", "")
-    if len(busca) < 3:
-        return jsonify({"placas": []})
-        
-    try:
-        caminho_cache = os.path.join(os.path.dirname(__file__), 'placas_cache.json')
-        
-        if os.path.exists(caminho_cache):
-            with open(caminho_cache, 'r', encoding='utf-8') as f:
-                cache_frota = json.load(f)
-        else:
-            cache_frota = []
-            
-        placas_filtradas = [placa for placa in cache_frota if placa.replace("-", "").startswith(busca)]
-        placas_filtradas.sort()
-        
-        # Aumentado de 10 para 50 sugestões para garantir que todos os carros semelhantes apareçam
-        return jsonify({"placas": placas_filtradas[:50]})
-        
-    except Exception as e:
-        print(f"Erro ao ler cache de sugestões: {e}")
-        return jsonify({"placas": []})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
