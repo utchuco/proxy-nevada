@@ -1,7 +1,8 @@
 import os
+import json
 import base64
 import requests
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -67,7 +68,7 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        espiao_api = None # O nosso detetive
+        espiao_api = None 
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -81,7 +82,6 @@ def buscar():
                             if placa_titular and placa_titular != placa:
                                 req_id = oc.get("contractItemRequestId")
                                 
-                                # --- INÍCIO DA CAPTURA DO ESPIÃO ---
                                 if req_id:
                                     url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
@@ -95,7 +95,6 @@ def buscar():
                                             arquivos_ocorrencia = r_files.json()
                                     except Exception as e:
                                         espiao_api = {"erro_interno_python": str(e)}
-                                # --- FIM DA CAPTURA ---
 
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
@@ -113,17 +112,10 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-# NOVA ROTA: Entrega a moldura HTML do visualizador
+# ROTA ORIGINAL RECUPERADA: Entrega o PDF nativo protegido
 @app.route('/crlv', methods=['POST'])
-def visualizar_crlv():
-    placa = request.form.get('placa')
-    senha = request.form.get('senha')
-    return render_template('visualizador.html', placa=placa, senha=senha)
-
-# ROTA ANTIGA BLINDADA: Entrega o PDF real apenas para o visualizador
-@app.route('/api/crlv', methods=['POST'])
 @limiter.limit("5 per minute")
-def api_crlv():
+def acessar_crlv():
     placa = request.form.get('placa')
     senha = request.form.get('senha')
     
@@ -147,6 +139,31 @@ def api_crlv():
                         return send_file(caminho_completo, mimetype='application/pdf')
     
     return f"Documento não encontrado para a placa {placa}.", 404
+
+# ROTA RECUPERADA: Autocompletar da frota
+@app.route("/api/veiculos/sugestoes", methods=["GET"])
+def api_sugestoes():
+    busca = request.args.get("q", "").strip().upper().replace("-", "")
+    if len(busca) < 3:
+        return jsonify({"placas": []})
+        
+    try:
+        caminho_cache = os.path.join(os.path.dirname(__file__), 'placas_cache.json')
+        
+        if os.path.exists(caminho_cache):
+            with open(caminho_cache, 'r', encoding='utf-8') as f:
+                cache_frota = json.load(f)
+        else:
+            cache_frota = []
+            
+        placas_filtradas = [p for p in cache_frota if p.replace("-", "").startswith(busca)]
+        placas_filtradas.sort()
+        
+        return jsonify({"placas": placas_filtradas[:50]})
+        
+    except Exception as e:
+        print(f"Erro ao ler cache de sugestões: {e}")
+        return jsonify({"placas": []})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
