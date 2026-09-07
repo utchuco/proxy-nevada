@@ -68,10 +68,6 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        
-        # --- MODO ESPIÃO GLOBAL ATIVADO ---
-        # Captura toda a resposta da Blue Fleet para essa placa
-        espiao_api = veiculo 
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -103,7 +99,7 @@ def buscar():
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia, espiao_api=espiao_api)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")

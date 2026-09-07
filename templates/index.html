@@ -43,52 +43,57 @@
     <script>
         const inputPlaca = document.getElementById('inputPlaca');
         const listaSugestoes = document.getElementById('listaSugestoes');
+        let timeoutBusca = null;
 
-        inputPlaca.addEventListener('input', async function (e) {
+        inputPlaca.addEventListener('input', function (e) {
             var valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             if (valor.length > 3) {
                 valor = valor.substring(0, 3) + '-' + valor.substring(3, 7);
             }
             e.target.value = valor;
 
+            clearTimeout(timeoutBusca);
+
             if (valor.replace('-', '').length >= 3) { 
-                try {
-                    const response = await fetch('/api/veiculos/sugestoes?q=' + valor);
-                    const data = await response.json();
-                    
-                    listaSugestoes.innerHTML = '';
-                    
-                    if (data.placas.length > 0) {
-                        listaSugestoes.style.display = 'block';
+                timeoutBusca = setTimeout(async function() {
+                    try {
+                        const response = await fetch('/api/veiculos/sugestoes?q=' + valor);
+                        const data = await response.json();
                         
-                        data.placas.forEach(placa => {
-                            let li = document.createElement('li');
-                            li.textContent = placa;
-                            li.style.padding = '12px 15px';
-                            li.style.borderBottom = '1px solid #eee';
-                            li.style.cursor = 'pointer';
-                            li.style.fontSize = '18px';
-                            li.style.fontWeight = 'bold';
-                            li.style.color = '#333';
+                        listaSugestoes.innerHTML = '';
+                        
+                        if (data.placas.length > 0) {
+                            listaSugestoes.style.display = 'block';
                             
-                            li.onmousedown = function(event) {
-                                event.preventDefault(); 
-                            };
-                            
-                            li.onclick = function() {
-                                inputPlaca.value = placa; 
-                                listaSugestoes.style.display = 'none'; 
-                                document.getElementById('btnBuscar').click(); 
-                            };
-                            
-                            listaSugestoes.appendChild(li);
-                        });
-                    } else {
-                        listaSugestoes.style.display = 'none';
+                            data.placas.forEach(placa => {
+                                let li = document.createElement('li');
+                                li.textContent = placa;
+                                li.style.padding = '12px 15px';
+                                li.style.borderBottom = '1px solid #eee';
+                                li.style.cursor = 'pointer';
+                                li.style.fontSize = '18px';
+                                li.style.fontWeight = 'bold';
+                                li.style.color = '#333';
+                                
+                                li.onmousedown = function(event) {
+                                    event.preventDefault(); 
+                                };
+                                
+                                li.onclick = function() {
+                                    inputPlaca.value = placa; 
+                                    listaSugestoes.style.display = 'none'; 
+                                    document.getElementById('btnBuscar').click(); 
+                                };
+                                
+                                listaSugestoes.appendChild(li);
+                            });
+                        } else {
+                            listaSugestoes.style.display = 'none';
+                        }
+                    } catch (err) {
+                        console.error("Erro ao buscar sugestões", err);
                     }
-                } catch (err) {
-                    console.error("Erro ao buscar sugestões", err);
-                }
+                }, 300);
             } else {
                 listaSugestoes.style.display = 'none';
             }
