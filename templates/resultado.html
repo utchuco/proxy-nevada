@@ -15,11 +15,11 @@
 </head>
 <body>
     <div class="container" style="text-align: center;">
-        <h2>🚗 Detalhes da Consulta</h2>
+        <h2>Detalhes da Consulta</h2>
 
         {% if veiculo_titular %}
             <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 8px; font-weight: bold; border-left: 5px solid #ffc107; text-align: left;">
-                ⚠️ Atenção: Este é um veículo reserva.
+                Atenção: Este é um veículo reserva.
             </div>
         {% endif %}
         
@@ -37,7 +37,7 @@
             
             <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
             
-            <h4 style="margin-bottom: 10px; color: #333;">📋 Dados da Locação</h4>
+            <h4 style="margin-bottom: 10px; color: #333;">Dados da Locação</h4>
             
             {% if veiculo_titular and veiculo_titular.contract and veiculo_titular.contract.customer %}
                 <p><strong>Cliente Atendido:</strong> {{ veiculo_titular.contract.customer.tradingName }}</p>
@@ -51,7 +51,7 @@
 
             <div style="margin-top: 15px;">
                 <button onclick="solicitarSenhaCrlv('{{ veiculo.licensePlate }}')" style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
-                    📄 Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
+                    Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
                 </button>
             </div>
         </div>
@@ -73,7 +73,7 @@
 
             <div style="margin-top: 15px;">
                 <button onclick="solicitarSenhaCrlv('{{ veiculo_titular.licensePlate }}')" style="padding: 8px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
-                    📄 Ver CRLV do Titular
+                    Ver CRLV do Titular
                 </button>
             </div>
         </div>
@@ -90,7 +90,7 @@
 
     <script>
         function solicitarSenhaCrlv(placaSelecionada) {
-            var senha = prompt("🔒 Acesso Restrito\nDigite a senha da frota para a placa " + placaSelecionada + ":");
+            var senha = prompt("Acesso Restrito\nDigite a senha da frota para a placa " + placaSelecionada + ":");
             if (senha) {
                 document.getElementById('inputPlacaCrlv').value = placaSelecionada;
                 document.getElementById('inputSenhaCrlv').value = senha;
