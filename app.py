@@ -68,12 +68,13 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        
-        # --- MODO ESPIÃO GLOBAL ATIVADO ---
-        # Captura toda a resposta da Blue Fleet para essa placa
-        espiao_api = veiculo 
+        espiao_api = None 
 
-        if veiculo.get("vehicleStatusId") == 14:
+        status_id = veiculo.get("vehicleStatusId")
+        holder_status_id = veiculo.get("vehicleHolderStatusId")
+
+        # 1. Se for o RESERVA (Status 14) -> Rota original já validada por nós
+        if status_id == 14:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
@@ -103,6 +104,16 @@ def buscar():
             except Exception:
                 pass
 
+        # 2. Se for o TITULAR na oficina (Holder Status 2) -> Alvo do novo Espião
+        elif holder_status_id == 2:
+            try:
+                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
+                if r_ocorrencia.status_code == 200:
+                    # Capturamos todas as ocorrências deste carro para procurar o reserva
+                    espiao_api = r_ocorrencia.json().get("data", [])
+            except Exception as e:
+                espiao_api = {"erro_espiao": str(e)}
+
         return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia, espiao_api=espiao_api)
 
     except requests.exceptions.HTTPError as err_http:
@@ -110,7 +121,7 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-
+# ROTA ORIGINAL RECUPERADA: Entrega o PDF nativo protegido
 @app.route('/crlv', methods=['POST'])
 @limiter.limit("5 per minute")
 def acessar_crlv():
@@ -138,6 +149,7 @@ def acessar_crlv():
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
+# ROTA RECUPERADA: Autocompletar da frota
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
     busca = request.args.get("q", "").strip().upper().replace("-", "")
