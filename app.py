@@ -68,7 +68,10 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        espiao_api = None 
+        
+        # --- MODO ESPIÃO GLOBAL ATIVADO ---
+        # Captura toda a resposta da Blue Fleet para essa placa
+        espiao_api = veiculo 
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -86,15 +89,10 @@ def buscar():
                                     url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
                                     try:
                                         r_files = requests.get(url_arquivos, headers=headers)
-                                        espiao_api = {
-                                            "status_http": r_files.status_code,
-                                            "url_testada": url_arquivos,
-                                            "resposta_bruta": r_files.text
-                                        }
                                         if r_files.status_code == 200:
                                             arquivos_ocorrencia = r_files.json()
-                                    except Exception as e:
-                                        espiao_api = {"erro_interno_python": str(e)}
+                                    except Exception:
+                                        pass
 
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
@@ -112,7 +110,7 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-# ROTA ORIGINAL RECUPERADA: Entrega o PDF nativo protegido
+
 @app.route('/crlv', methods=['POST'])
 @limiter.limit("5 per minute")
 def acessar_crlv():
@@ -140,7 +138,6 @@ def acessar_crlv():
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
-# ROTA RECUPERADA: Autocompletar da frota
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
     busca = request.args.get("q", "").strip().upper().replace("-", "")

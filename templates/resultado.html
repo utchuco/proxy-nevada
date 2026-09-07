@@ -6,7 +6,6 @@
     <title>Detalhes do Veículo - Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     
-    <!-- Configurações de Aplicativo (PWA) -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#0056b3">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,10 +15,19 @@
 </head>
 <body>
     <div class="container" style="text-align: center;">
-        <h2>🚗 Veículo Encontrado</h2>
+        <h2>🚗 Detalhes da Consulta</h2>
+
+        {% if veiculo_titular %}
+            <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 8px; font-weight: bold; border-left: 5px solid #ffc107; text-align: left;">
+                ⚠️ Atenção: Este é um veículo reserva.
+            </div>
+        {% endif %}
         
-        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="margin-top: 0; color: #0056b3;">Placa: {{ veiculo.licensePlate }}</h3>
+        <!-- BLOCO 1: O Veículo Pesquisado (Pode ser o Reserva ou Regular) -->
+        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; {% if veiculo_titular %}border-left: 5px solid #17a2b8;{% endif %}">
+            <h3 style="margin-top: 0; color: #0056b3;">
+                {% if veiculo_titular %}🚙 Carro Reserva:{% else %}Veículo:{% endif %} {{ veiculo.licensePlate }}
+            </h3>
             
             <p><strong>Montadora:</strong> {{ veiculo.automakerName }}</p>
             <p><strong>Modelo:</strong> {{ veiculo.vehicleModelName }}</p>
@@ -31,18 +39,8 @@
             
             <h4 style="margin-bottom: 10px; color: #333;">📋 Dados da Locação</h4>
             
-            {% if veiculo_titular %}
-                <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 5px; border-left: 5px solid #ffeeba; margin-bottom: 15px;">
-                    <strong>⚠️ VEÍCULO SUBSTITUTO</strong><br><br>
-                    Cobrindo o carro: <strong>{{ veiculo_titular.licensePlate }}</strong><br>
-                    Cliente Titular: <strong>
-                        {% if veiculo_titular.contract and veiculo_titular.contract.customer %}
-                            {{ veiculo_titular.contract.customer.tradingName }}
-                        {% else %}
-                            Não identificado
-                        {% endif %}
-                    </strong>
-                </div>
+            {% if veiculo_titular and veiculo_titular.contract and veiculo_titular.contract.customer %}
+                <p><strong>Cliente Atendido:</strong> {{ veiculo_titular.contract.customer.tradingName }}</p>
             {% elif veiculo.contract and veiculo.contract.customer %}
                 <p><strong>Cliente:</strong> {{ veiculo.contract.customer.tradingName }}</p>
             {% else %}
@@ -50,24 +48,45 @@
             {% endif %}
             
             <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
+
+            <div style="margin-top: 15px;">
+                <button onclick="solicitarSenhaCrlv('{{ veiculo.licensePlate }}')" style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
+                    📄 Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
+                </button>
+            </div>
         </div>
 
-        <!-- Botão Discreto do CRLV -->
-        <div style="margin-bottom: 20px;">
-            <button onclick="solicitarSenhaCrlv()" style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 50px; font-size: 14px; cursor: pointer; font-weight: bold;">
-                📄 Ver Documento (CRLV)
-            </button>
-        </div>
+        <!-- BLOCO 2: O Veículo Titular (Só aparece se o pesquisado for Reserva) -->
+        {% if veiculo_titular %}
+        <div style="text-align: left; background: #fffdf5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h3 style="margin-top: 0; color: #856404;">🚗 Carro Titular (Oficina): {{ veiculo_titular.licensePlate }}</h3>
 
-        <!-- Formulário Oculto que o JavaScript vai usar -->
+            <p><strong>Montadora:</strong> {{ veiculo_titular.automakerName }}</p>
+            <p><strong>Modelo:</strong> {{ veiculo_titular.vehicleModelName }}</p>
+            <p><strong>Cor:</strong> {{ veiculo_titular.vehicleColor }}</p>
+            <p><strong>Ano:</strong> {{ veiculo_titular.manufactureYear }} / {{ veiculo_titular.modelYear }}</p>
+            <p><strong>Status:</strong> <span style="background-color: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ veiculo_titular.vehicleStatusName }}</span></p>
+
+            <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
+
+            <p><strong>Último Km Registrado:</strong> {{ veiculo_titular.informedOdometer }} km</p>
+
+            <div style="margin-top: 15px;">
+                <button onclick="solicitarSenhaCrlv('{{ veiculo_titular.licensePlate }}')" style="padding: 8px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
+                    📄 Ver CRLV do Titular
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Formulário Oculto Único para os dois botões de CRLV -->
         <form id="formCrlv" action="/crlv" method="POST" target="_blank" style="display: none;">
-            <input type="hidden" name="placa" value="{{ veiculo.licensePlate }}">
+            <input type="hidden" name="placa" id="inputPlacaCrlv">
             <input type="hidden" name="senha" id="inputSenhaCrlv">
         </form>
 
-        <a href="/" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; width: 100%; box-sizing: border-box;">Fazer Nova Busca</a>
+        <a href="/" style="display: inline-block; padding: 15px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; width: 100%; box-sizing: border-box; font-size: 16px;">Fazer Nova Busca</a>
         
-        <!-- Diagnóstico do Espião de API -->
         {% if espiao_api %}
         <details style="margin-top: 30px; text-align: left; background: #eee; padding: 10px; border-radius: 5px;">
             <summary style="cursor: pointer; font-size: 12px; color: #555; font-weight: bold;">🛠️ Modo Diagnóstico</summary>
@@ -76,14 +95,11 @@
         {% endif %}
     </div>
 
-    <!-- Script da Janelinha de Senha -->
     <script>
-        function solicitarSenhaCrlv() {
-            // Abre o pop-up nativo do celular
-            var senha = prompt("🔒 Acesso Restrito\nDigite a senha da frota (PIN):");
-            
-            // Se ele digitou algo e apertou OK
+        function solicitarSenhaCrlv(placaSelecionada) {
+            var senha = prompt("🔒 Acesso Restrito\nDigite a senha da frota para a placa " + placaSelecionada + ":");
             if (senha) {
+                document.getElementById('inputPlacaCrlv').value = placaSelecionada;
                 document.getElementById('inputSenhaCrlv').value = senha;
                 document.getElementById('formCrlv').submit();
             }
