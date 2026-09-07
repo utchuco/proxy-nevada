@@ -68,13 +68,12 @@ def buscar():
         veiculo = lista_veiculos[0]
         veiculo_titular = None
         arquivos_ocorrencia = None 
-        espiao_api = None 
+        
+        # --- MODO ESPIÃO GLOBAL ATIVADO ---
+        # Captura toda a resposta da Blue Fleet para essa placa
+        espiao_api = veiculo 
 
-        status_id = veiculo.get("vehicleStatusId")
-        holder_status_id = veiculo.get("vehicleHolderStatusId")
-
-        # 1. Se for o RESERVA (Status 14) -> Rota original
-        if status_id == 14:
+        if veiculo.get("vehicleStatusId") == 14:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
@@ -104,33 +103,6 @@ def buscar():
             except Exception:
                 pass
 
-        # 2. Se for o TITULAR na oficina (Holder Status 2) -> Espião Atirador de Elite
-        elif holder_status_id == 2:
-            try:
-                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
-                if r_ocorrencia.status_code == 200:
-                    ocorrencias = r_ocorrencia.json().get("data", [])
-                    ocorrencia_reserva = None
-                    
-                    # Procura a ocorrência de Carro Reserva (5) que está Em Andamento (2)
-                    for oc in ocorrencias:
-                        if oc.get("contractItemRequestReasonId") == 5 and oc.get("contractItemRequestStatusId") == 2:
-                            ocorrencia_reserva = oc
-                            break
-                    
-                    if ocorrencia_reserva:
-                        req_id = ocorrencia_reserva.get("contractItemRequestId")
-                        # O espião agora entra nos detalhes da ocorrência
-                        r_detalhe = requests.get(f"{API_URL}/contract-item-request/{req_id}", headers=headers)
-                        if r_detalhe.status_code == 200:
-                            espiao_api = r_detalhe.json()
-                        else:
-                            espiao_api = {"erro": f"Falha ao abrir detalhe. HTTP: {r_detalhe.status_code}"}
-                    else:
-                        espiao_api = {"erro": "Nenhuma ocorrência de Carro Reserva 'Em Andamento' foi encontrada na vitrine."}
-            except Exception as e:
-                espiao_api = {"erro_espiao": str(e)}
-
         return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia, espiao_api=espiao_api)
 
     except requests.exceptions.HTTPError as err_http:
@@ -138,7 +110,7 @@ def buscar():
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
-# ROTA ORIGINAL RECUPERADA: Entrega o PDF nativo protegido
+
 @app.route('/crlv', methods=['POST'])
 @limiter.limit("5 per minute")
 def acessar_crlv():
@@ -166,7 +138,6 @@ def acessar_crlv():
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
-# ROTA RECUPERADA: Autocompletar da frota
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
     busca = request.args.get("q", "").strip().upper().replace("-", "")
