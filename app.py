@@ -73,7 +73,7 @@ def buscar():
         status_id = veiculo.get("vehicleStatusId")
         holder_status_id = veiculo.get("vehicleHolderStatusId")
 
-        # 1. Se for o RESERVA (Status 14) -> Rota original já validada por nós
+        # 1. Se for o RESERVA (Status 14) -> Rota original
         if status_id == 14:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
@@ -104,13 +104,30 @@ def buscar():
             except Exception:
                 pass
 
-        # 2. Se for o TITULAR na oficina (Holder Status 2) -> Alvo do novo Espião
+        # 2. Se for o TITULAR na oficina (Holder Status 2) -> Espião Atirador de Elite
         elif holder_status_id == 2:
             try:
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
-                    # Capturamos todas as ocorrências deste carro para procurar o reserva
-                    espiao_api = r_ocorrencia.json().get("data", [])
+                    ocorrencias = r_ocorrencia.json().get("data", [])
+                    ocorrencia_reserva = None
+                    
+                    # Procura a ocorrência de Carro Reserva (5) que está Em Andamento (2)
+                    for oc in ocorrencias:
+                        if oc.get("contractItemRequestReasonId") == 5 and oc.get("contractItemRequestStatusId") == 2:
+                            ocorrencia_reserva = oc
+                            break
+                    
+                    if ocorrencia_reserva:
+                        req_id = ocorrencia_reserva.get("contractItemRequestId")
+                        # O espião agora entra nos detalhes da ocorrência
+                        r_detalhe = requests.get(f"{API_URL}/contract-item-request/{req_id}", headers=headers)
+                        if r_detalhe.status_code == 200:
+                            espiao_api = r_detalhe.json()
+                        else:
+                            espiao_api = {"erro": f"Falha ao abrir detalhe. HTTP: {r_detalhe.status_code}"}
+                    else:
+                        espiao_api = {"erro": "Nenhuma ocorrência de Carro Reserva 'Em Andamento' foi encontrada na vitrine."}
             except Exception as e:
                 espiao_api = {"erro_espiao": str(e)}
 
