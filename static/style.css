@@ -4,8 +4,12 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    /* CORREÇÃO AQUI: Troquei height por min-height para permitir rolagem */
+    min-height: 100vh; 
     margin: 0;
+    /* Adiciona espaço para a caixa não encostar nas bordas quando crescer */
+    padding: 20px 0; 
+    box-sizing: border-box;
 }
 .container {
     background-color: white;
@@ -15,6 +19,8 @@ body {
     text-align: center;
     width: 90%;
     max-width: 400px;
+    /* Garante que o conteúdo que vazar não estrague o layout */
+    box-sizing: border-box; 
 }
 input {
     width: 100%;
