@@ -97,13 +97,12 @@ def buscar():
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
 
-# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST ---
+# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST (MODO DETETIVE) ---
 @app.route("/checklist/<placa>")
 def buscar_checklist(placa):
     placa = placa.strip().upper()
-    placa_limpa = placa.replace("-", "") # Fica apenas FOK7B75
+    placa_limpa = placa.replace("-", "") 
     
-    # Adiciona o traço se vier sem, para buscar na Blue Fleet
     if len(placa) == 7 and "-" not in placa:
         placa = f"{placa[:3]}-{placa[3:]}"
 
@@ -114,7 +113,6 @@ def buscar_checklist(placa):
             "Accept": "application/json"
         }
         
-        # 1. Puxa todas as ocorrências da placa
         r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
         if r_ocorrencia.status_code != 200:
             return "Erro ao buscar histórico de ocorrências na Blue Fleet.", 500
@@ -123,10 +121,11 @@ def buscar_checklist(placa):
         if not ocorrencias:
             return "Nenhuma ocorrência encontrada para este veículo.", 404
             
-        # Ordena da mais nova para a mais velha
         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
         
-        # 2. Varredura: Entra em ocorrência por ocorrência procurando o PDF
+        # LISTA DE DEPURACAO
+        arquivos_espionados = []
+        
         for oc in ocorrencias:
             req_id = oc.get("contractItemRequestId")
             if not req_id: continue
@@ -136,35 +135,43 @@ def buscar_checklist(placa):
             
             if r_files.status_code == 200:
                 resposta_arquivos = r_files.json()
-                # Tenta pegar da chave 'data' ou usa a lista direta
                 lista_arquivos = resposta_arquivos.get("data", resposta_arquivos) 
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        # Pega o nome do arquivo de qualquer chave possível que a Blue Fleet mandar
-                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", ""))))
+                        # Tenta pegar todas as chaves possíveis para ver o que a API manda
+                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", "ARQUIVO_SEM_NOME"))))
                         
-                        # Limpa tudo: tira traços, espaços e joga pra maiúsculo
+                        # Salva o nome bruto na nossa lista de espionagem
+                        arquivos_espionados.append(nome_bruto)
+                        
                         nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
                         
-                        # Busca blindada: Se FOK7B75 estiver em qualquer parte do nome limpo
                         if placa_limpa in nome_limpo:
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
-                            
                             url_download = arquivo.get("url") or f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
                             
-                            # Baixa o arquivo exclusivamente para a MEMÓRIA RAM (não toca no disco)
                             r_pdf = requests.get(url_download, headers=headers)
                             
                             if r_pdf.status_code == 200:
                                 return send_file(
                                     io.BytesIO(r_pdf.content),
                                     mimetype='application/pdf',
-                                    as_attachment=False, # Impede de baixar automaticamente, tenta exibir no navegador
+                                    as_attachment=False, 
                                     download_name=f"Checklist_{placa_limpa}.pdf"
                                 )
                                 
-        return f"Checklist não encontrado. O sistema vasculhou as ocorrências, mas nenhum anexo continha '{placa_limpa}' no nome.", 404
+        # SE ELE NÃO ACHAR A PLACA NO NOME, VAI CUSPIR A LISTA NA TELA!
+        lista_formatada = "<br>".join([f"👉 {arq}" for arq in arquivos_espionados]) if arquivos_espionados else "A API não listou nenhum arquivo anexado."
+        
+        html_erro = f"""
+        <h3>Checklist não encontrado para {placa_limpa}</h3>
+        <p>O sistema entrou nas ocorrências, mas veja como a Blue Fleet está devolvendo os nomes dos arquivos:</p>
+        <div style='background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: left; font-family: monospace;'>
+            {lista_formatada}
+        </div>
+        """
+        return html_erro, 404
 
     except Exception as e:
         return f"Erro interno ao buscar checklist: {str(e)}", 500
