@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import requests
-import io
+import io 
 from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -135,15 +135,21 @@ def buscar_checklist(placa):
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        # O SEGREDO ESTAVA AQUI: "filename" com 'n' minúsculo
                         nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", ""))))
                         nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
                         
                         if placa_limpa in nome_limpo and placa_limpa != "":
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
-                            url_download = arquivo.get("url") or f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
+                            url_direta = arquivo.get("url")
                             
-                            r_pdf = requests.get(url_download, headers=headers)
+                            # CORREÇÃO DO BLOQUEIO DA AMAZON (AWS S3)
+                            if url_direta:
+                                # Se tem URL direta da Amazon, baixamos SEM os cabeçalhos da Blue Fleet
+                                r_pdf = requests.get(url_direta)
+                            else:
+                                # Se não tem, usamos a API da Blue Fleet COM os cabeçalhos
+                                url_api = f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
+                                r_pdf = requests.get(url_api, headers=headers)
                             
                             if r_pdf.status_code == 200:
                                 return send_file(
