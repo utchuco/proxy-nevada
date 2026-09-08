@@ -97,7 +97,7 @@ def buscar():
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
 
-# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST (MODO DETETIVE) ---
+# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST (MODO DETETIVE NIVEL 2) ---
 @app.route("/checklist/<placa>")
 def buscar_checklist(placa):
     placa = placa.strip().upper()
@@ -123,7 +123,7 @@ def buscar_checklist(placa):
             
         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
         
-        # LISTA DE DEPURACAO
+        # LISTA DE DEPURACAO PROFUNDA
         arquivos_espionados = []
         
         for oc in ocorrencias:
@@ -139,15 +139,16 @@ def buscar_checklist(placa):
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        # Tenta pegar todas as chaves possíveis para ver o que a API manda
-                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", "ARQUIVO_SEM_NOME"))))
+                        # >>> A MÁGICA MUDA AQUI <<<
+                        # Vamos capturar o dicionário inteiro do arquivo, sem tentar adivinhar a chave
+                        json_cru = json.dumps(arquivo, ensure_ascii=False)
+                        arquivos_espionados.append(json_cru)
                         
-                        # Salva o nome bruto na nossa lista de espionagem
-                        arquivos_espionados.append(nome_bruto)
-                        
+                        # Mantém a tentativa de busca original só por precaução
+                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", ""))))
                         nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
                         
-                        if placa_limpa in nome_limpo:
+                        if placa_limpa in nome_limpo and placa_limpa != "":
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
                             url_download = arquivo.get("url") or f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
                             
@@ -161,13 +162,13 @@ def buscar_checklist(placa):
                                     download_name=f"Checklist_{placa_limpa}.pdf"
                                 )
                                 
-        # SE ELE NÃO ACHAR A PLACA NO NOME, VAI CUSPIR A LISTA NA TELA!
-        lista_formatada = "<br>".join([f"👉 {arq}" for arq in arquivos_espionados]) if arquivos_espionados else "A API não listou nenhum arquivo anexado."
+        # CUSPINDO O JSON INTEIRO NA TELA
+        lista_formatada = "<hr>".join([f"<code>{arq}</code>" for arq in arquivos_espionados]) if arquivos_espionados else "A API não listou nenhum arquivo anexado."
         
         html_erro = f"""
-        <h3>Checklist não encontrado para {placa_limpa}</h3>
-        <p>O sistema entrou nas ocorrências, mas veja como a Blue Fleet está devolvendo os nomes dos arquivos:</p>
-        <div style='background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: left; font-family: monospace;'>
+        <h3>Raio-X dos Anexos da Blue Fleet</h3>
+        <p>Veja abaixo o código cru que eles estão enviando. Precisamos achar onde o nome do PDF está escondido:</p>
+        <div style='background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: left; font-family: monospace; overflow-wrap: break-word;'>
             {lista_formatada}
         </div>
         """
