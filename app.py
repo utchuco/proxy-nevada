@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import requests
-import io # Nova importação para manipular o PDF na memória
+import io # Importação para manipular o PDF na memória
 from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -117,7 +117,7 @@ def buscar_checklist(placa):
         # 1. Puxa todas as ocorrências da placa
         r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
         if r_ocorrencia.status_code != 200:
-            return "Erro ao buscar histórico de ocorrências.", 500
+            return "Erro ao buscar histórico de ocorrências na Blue Fleet.", 500
             
         ocorrencias = r_ocorrencia.json().get("data", [])
         if not ocorrencias:
@@ -136,30 +136,35 @@ def buscar_checklist(placa):
             
             if r_files.status_code == 200:
                 resposta_arquivos = r_files.json()
-                lista_arquivos = resposta_arquivos.get("data", resposta_arquivos) # Tenta pegar .data, se não for, usa a própria lista
+                # Tenta pegar da chave 'data' ou usa a lista direta
+                lista_arquivos = resposta_arquivos.get("data", resposta_arquivos) 
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        # Extrai o nome do arquivo da API
-                        nome_arquivo = arquivo.get("fileName", arquivo.get("name", "")).upper()
+                        # Pega o nome do arquivo de qualquer chave possível que a Blue Fleet mandar
+                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", ""))))
                         
-                        # Verifica se o arquivo tem a placa (ex: FOK7B75) e é PDF
-                        if placa_limpa in nome_arquivo and nome_arquivo.endswith(".PDF"):
+                        # Limpa tudo: tira traços, espaços e joga pra maiúsculo
+                        nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
+                        
+                        # Busca blindada: Se FOK7B75 estiver em qualquer parte do nome limpo
+                        if placa_limpa in nome_limpo:
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
                             
-                            # Faz o download do arquivo em memória
                             url_download = arquivo.get("url") or f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
+                            
+                            # Baixa o arquivo exclusivamente para a MEMÓRIA RAM (não toca no disco)
                             r_pdf = requests.get(url_download, headers=headers)
                             
                             if r_pdf.status_code == 200:
                                 return send_file(
                                     io.BytesIO(r_pdf.content),
                                     mimetype='application/pdf',
-                                    as_attachment=False,
-                                    download_name=nome_arquivo
+                                    as_attachment=False, # Impede de baixar automaticamente, tenta exibir no navegador
+                                    download_name=f"Checklist_{placa_limpa}.pdf"
                                 )
                                 
-        return f"Checklist não encontrado para a placa {placa}. Verifique se o PDF está anexado nas últimas ocorrências.", 404
+        return f"Checklist não encontrado. O sistema vasculhou as ocorrências, mas nenhum anexo continha '{placa_limpa}' no nome.", 404
 
     except Exception as e:
         return f"Erro interno ao buscar checklist: {str(e)}", 500
