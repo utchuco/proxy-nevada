@@ -3,6 +3,7 @@ import json
 import base64
 import requests
 import io 
+import re 
 from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -12,7 +13,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configura o escudo Anti-Robô na memória do servidor
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -66,37 +66,78 @@ def buscar():
         if not lista_veiculos:
             return render_template("index.html", erro=f"Veículo não encontrado para a placa {placa}.")
         
-        veiculo = lista_veiculos[0]
-        veiculo_titular = None
+        veiculo_base = lista_veiculos[0]
+        veiculo_id = veiculo_base.get("vehicleId")
+        
+        carro_titular = None
+        carro_reserva = None
+        reserva_oculta_detectada = False
+        placa_limpa_base = placa.replace("-", "")
 
-        if veiculo.get("vehicleStatusId") == 14:
+        # 1. Define quem é quem com base na pesquisa inicial
+        if str(veiculo_base.get("vehicleStatusId")) == "14":
+            carro_reserva = veiculo_base
+        else:
+            carro_titular = veiculo_base
+
+        # 2. OMNI-RADAR: Dispara contra todas as rotas catalogadas no Swagger
+        endpoints_radar = [
+            f"{API_URL}/contract-item-request/search?LicensePlate={placa}",
+            f"{API_URL}/contract-item/search?LicensePlate={placa}",
+            f"{API_URL}/vehicle/{veiculo_id}/contract-item",
+            f"{API_URL}/vehicle/reservation?licensePlate={placa}"
+        ]
+
+        placas_encontradas = set()
+        
+        for url in endpoints_radar:
             try:
-                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
-                if r_ocorrencia.status_code == 200:
-                    ocorrencias = r_ocorrencia.json().get("data", [])
-                    if ocorrencias:
-                        ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                        for oc in ocorrencias:
-                            placa_titular = oc.get("licensePlate")
-                            if placa_titular and placa_titular != placa:
-                                r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
-                                if r_titular.status_code == 200:
-                                    lista_titular = r_titular.json().get("data", [])
-                                    if lista_titular:
-                                        veiculo_titular = lista_titular[0]
-                                        break
-            except Exception:
-                pass
+                r_teste = requests.get(url, headers=headers, timeout=4)
+                if r_teste.status_code == 200:
+                    texto_api = r_teste.text.upper()
+                    
+                    # Detecta pelo texto se existe alguma menção a "Aguardando Devolução" ou "Reserva"
+                    if "RESERVA" in texto_api and "AGUARDANDO DEVOLU" in texto_api:
+                        reserva_oculta_detectada = True
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular)
+                    # Pente fino: caça qualquer padrão de placa no meio do JSON (Mercosul e Antiga)
+                    placas_regex = set(re.findall(r'([A-Z]{3}[ -]?[0-9][A-Z0-9][0-9]{2})', texto_api))
+                    
+                    for p in placas_regex:
+                        p_clean = p.replace("-", "").replace(" ", "")
+                        if p_clean != placa_limpa_base:
+                            placas_encontradas.add(p_clean)
+            except Exception:
+                continue
+
+        # 3. Valida as placas suspeitas na rota principal de veículos
+        for p_clean in placas_encontradas:
+            if carro_titular and carro_reserva:
+                break # Já achou os dois, para a busca
+                
+            try:
+                r_valida = requests.get(f"{API_URL}/vehicle?LicensePlate={p_clean}", headers=headers, timeout=3)
+                if r_valida.status_code == 200 and r_valida.json().get("data"):
+                    v_teste = r_valida.json().get("data")[0]
+                    status_id = str(v_teste.get("vehicleStatusId"))
+                    
+                    # Conecta os pontos garantindo que as variáveis certas sejam preenchidas
+                    if carro_titular and not carro_reserva and status_id == "14":
+                        carro_reserva = v_teste
+                        reserva_oculta_detectada = False
+                    elif carro_reserva and not carro_titular and status_id != "14":
+                        carro_titular = v_teste
+            except Exception:
+                continue
+
+        return render_template("resultado.html", titular=carro_titular, reserva=carro_reserva, aviso_reserva=reserva_oculta_detectada)
 
     except requests.exceptions.HTTPError as err_http:
-        return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
+        return render_template("index.html", erro=f"Falha na comunicação com a API: {err_http}")
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
 
-# --- ROTA FINAL: MOTOR DE BUSCA DO CHECKLIST ---
 @app.route("/checklist/<placa>")
 def buscar_checklist(placa):
     placa = placa.strip().upper()
@@ -142,12 +183,9 @@ def buscar_checklist(placa):
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
                             url_direta = arquivo.get("url")
                             
-                            # CORREÇÃO DO BLOQUEIO DA AMAZON (AWS S3)
                             if url_direta:
-                                # Se tem URL direta da Amazon, baixamos SEM os cabeçalhos da Blue Fleet
                                 r_pdf = requests.get(url_direta)
                             else:
-                                # Se não tem, usamos a API da Blue Fleet COM os cabeçalhos
                                 url_api = f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
                                 r_pdf = requests.get(url_api, headers=headers)
                             

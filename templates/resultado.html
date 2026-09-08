@@ -1,93 +1,86 @@
-[<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalhes do Veículo - Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#0056b3">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Nevada">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
 </head>
 <body>
     <div class="container" style="text-align: center;">
         <h2>Detalhes da Consulta</h2>
 
-        {% if veiculo_titular %}
+        <!-- AVISO INTELIGENTE: Se a API blindar totalmente a placa do reserva -->
+        {% if aviso_reserva and not reserva %}
+            <div style="margin-bottom: 20px; padding: 15px; background-color: #fff3cd; color: #856404; border-radius: 8px; border-left: 5px solid #ffc107; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="margin-top: 0; margin-bottom: 5px;">⚠️ Veículo em Manutenção</h4>
+                <p style="font-size: 14px; margin: 0;">Identificamos que um Carro Reserva foi liberado, mas a locadora não exportou a placa dele. Para acessar o Check-list, <strong>faça uma nova busca utilizando a placa física do veículo que está com você.</strong></p>
+            </div>
+        {% endif %}
+
+        {% if reserva and not titular %}
             <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 8px; font-weight: bold; border-left: 5px solid #ffc107; text-align: left;">
                 Atenção: Este é um veículo reserva.
             </div>
         {% endif %}
         
-        <!-- BLOCO 1: O Veículo Pesquisado -->
-        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; {% if veiculo_titular %}border-left: 5px solid #17a2b8;{% endif %}">
-            <h3 style="margin-top: 0; color: #0056b3;">
-                {% if veiculo_titular %}🚙 Carro Reserva:{% else %}Veículo:{% endif %} {{ veiculo.licensePlate }}
-            </h3>
+        <!-- BLOCO TITULAR -->
+        {% if titular %}
+        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #0056b3;">
+            <h3 style="margin-top: 0; color: #0056b3;">🚙 Carro Titular: {{ titular.licensePlate }}</h3>
             
-            <p><strong>Montadora:</strong> {{ veiculo.automakerName }}</p>
-            <p><strong>Modelo:</strong> {{ veiculo.vehicleModelName }}</p>
-            <p><strong>Cor:</strong> {{ veiculo.vehicleColor }}</p>
-            <p><strong>Ano:</strong> {{ veiculo.manufactureYear }} / {{ veiculo.modelYear }}</p>
-            <p><strong>Status:</strong> <span style="background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ veiculo.vehicleStatusName }}</span></p>
+            <p><strong>Montadora:</strong> {{ titular.automakerName }}</p>
+            <p><strong>Modelo:</strong> {{ titular.vehicleModelName }}</p>
+            <p><strong>Cor:</strong> {{ titular.vehicleColor }}</p>
+            <p><strong>Ano:</strong> {{ titular.manufactureYear }} / {{ titular.modelYear }}</p>
+            <p><strong>Status:</strong> <span style="background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ titular.vehicleStatusName }}</span></p>
             
             <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
             
             <h4 style="margin-bottom: 10px; color: #333;">Dados da Locação</h4>
-            
-            {% if veiculo_titular and veiculo_titular.contract and veiculo_titular.contract.customer %}
-                <p><strong>Cliente Atendido:</strong> {{ veiculo_titular.contract.customer.tradingName }}</p>
-            {% elif veiculo.contract and veiculo.contract.customer %}
-                <p><strong>Cliente:</strong> {{ veiculo.contract.customer.tradingName }}</p>
+            {% if titular.contract and titular.contract.customer %}
+                <p><strong>Cliente:</strong> {{ titular.contract.customer.tradingName }}</p>
             {% else %}
                 <p><em>Sem contrato ativo vinculado no momento.</em></p>
             {% endif %}
             
-            <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
+            <p><strong>Último Km Registrado:</strong> {{ titular.informedOdometer }} km</p>
 
-            <!-- BOTOES DE ACAO DO VEICULO -->
             <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
-                <!-- NOVO BOTÃO: CHECKLIST -->
-                <button onclick="abrirChecklist('{{ veiculo.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📋 Ver Checklist {{ 'do Reserva' if veiculo_titular else '' }}
+                <button onclick="abrirChecklist('{{ titular.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📋 Ver Checklist do Titular
                 </button>
-                
-                <!-- BOTÃO: CRLV -->
-                <button onclick="solicitarSenhaCrlv('{{ veiculo.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📄 Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
+                <button onclick="solicitarSenhaCrlv('{{ titular.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📄 Ver CRLV do Titular
                 </button>
             </div>
         </div>
+        {% endif %}
 
-        <!-- BLOCO 2: O Veículo Titular (Só aparece se o pesquisado for Reserva) -->
-        {% if veiculo_titular %}
+        <!-- BLOCO RESERVA -->
+        {% if reserva %}
         <div style="text-align: left; background: #fffdf5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <h3 style="margin-top: 0; color: #856404;">🚗 Carro Titular (Oficina): {{ veiculo_titular.licensePlate }}</h3>
+            <h3 style="margin-top: 0; color: #856404;">🚗 Carro Reserva: {{ reserva.licensePlate }}</h3>
 
-            <p><strong>Montadora:</strong> {{ veiculo_titular.automakerName }}</p>
-            <p><strong>Modelo:</strong> {{ veiculo_titular.vehicleModelName }}</p>
-            <p><strong>Cor:</strong> {{ veiculo_titular.vehicleColor }}</p>
-            <p><strong>Ano:</strong> {{ veiculo_titular.manufactureYear }} / {{ veiculo_titular.modelYear }}</p>
-            <p><strong>Status:</strong> <span style="background-color: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ veiculo_titular.vehicleStatusName }}</span></p>
+            <p><strong>Montadora:</strong> {{ reserva.automakerName }}</p>
+            <p><strong>Modelo:</strong> {{ reserva.vehicleModelName }}</p>
+            <p><strong>Cor:</strong> {{ reserva.vehicleColor }}</p>
+            <p><strong>Ano:</strong> {{ reserva.manufactureYear }} / {{ reserva.modelYear }}</p>
+            <p><strong>Status:</strong> <span style="background-color: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ reserva.vehicleStatusName }}</span></p>
 
             <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
 
-            <p><strong>Último Km Registrado:</strong> {{ veiculo_titular.informedOdometer }} km</p>
+            <p><strong>Último Km Registrado:</strong> {{ reserva.informedOdometer }} km</p>
 
-            <!-- BOTOES DE ACAO DO VEICULO TITULAR -->
             <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
-                <!-- NOVO BOTÃO: CHECKLIST TITULAR -->
-                <button onclick="abrirChecklist('{{ veiculo_titular.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📋 Ver Checklist do Titular
+                <button onclick="abrirChecklist('{{ reserva.licensePlate }}', this)" style="padding: 10px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📋 Ver Checklist do Reserva
                 </button>
-                
-                <!-- BOTÃO: CRLV TITULAR -->
-                <button onclick="solicitarSenhaCrlv('{{ veiculo_titular.licensePlate }}')" style="padding: 10px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📄 Ver CRLV do Titular
+                <button onclick="solicitarSenhaCrlv('{{ reserva.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📄 Ver CRLV do Reserva
                 </button>
             </div>
         </div>
@@ -112,23 +105,24 @@
             }
         }
 
-        // Função para abrir o Checklist com efeito visual de "Buscando..."
         function abrirChecklist(placaSelecionada, btnElement) {
             var textoOriginal = btnElement.innerHTML;
             btnElement.innerHTML = 'Buscando Checklist... ⏳';
             btnElement.style.backgroundColor = '#6c757d';
             btnElement.disabled = true;
             
-            // Abre o checklist em uma nova aba
             window.open('/checklist/' + placaSelecionada, '_blank');
             
-            // Retorna o botão ao normal após 3 segundos
             setTimeout(function() {
                 btnElement.innerHTML = textoOriginal;
-                btnElement.style.backgroundColor = '#0056b3';
+                if(textoOriginal.includes('Reserva')){
+                    btnElement.style.backgroundColor = '#ffc107';
+                } else {
+                    btnElement.style.backgroundColor = '#0056b3';
+                }
                 btnElement.disabled = false;
             }, 3000);
         }
     </script>
 </body>
-</html>]
+</html>
