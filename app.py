@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import requests
-import io # Importação para manipular o PDF na memória
+import io
 from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -68,7 +68,6 @@ def buscar():
         
         veiculo = lista_veiculos[0]
         veiculo_titular = None
-        arquivos_ocorrencia = None 
 
         if veiculo.get("vehicleStatusId") == 14:
             try:
@@ -97,7 +96,7 @@ def buscar():
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
 
 
-# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST (MODO DETETIVE NIVEL 2) ---
+# --- ROTA FINAL: MOTOR DE BUSCA DO CHECKLIST ---
 @app.route("/checklist/<placa>")
 def buscar_checklist(placa):
     placa = placa.strip().upper()
@@ -123,9 +122,6 @@ def buscar_checklist(placa):
             
         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
         
-        # LISTA DE DEPURACAO PROFUNDA
-        arquivos_espionados = []
-        
         for oc in ocorrencias:
             req_id = oc.get("contractItemRequestId")
             if not req_id: continue
@@ -139,13 +135,8 @@ def buscar_checklist(placa):
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        # >>> A MÁGICA MUDA AQUI <<<
-                        # Vamos capturar o dicionário inteiro do arquivo, sem tentar adivinhar a chave
-                        json_cru = json.dumps(arquivo, ensure_ascii=False)
-                        arquivos_espionados.append(json_cru)
-                        
-                        # Mantém a tentativa de busca original só por precaução
-                        nome_bruto = str(arquivo.get("fileName", arquivo.get("name", arquivo.get("description", ""))))
+                        # O SEGREDO ESTAVA AQUI: "filename" com 'n' minúsculo
+                        nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", ""))))
                         nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
                         
                         if placa_limpa in nome_limpo and placa_limpa != "":
@@ -162,17 +153,7 @@ def buscar_checklist(placa):
                                     download_name=f"Checklist_{placa_limpa}.pdf"
                                 )
                                 
-        # CUSPINDO O JSON INTEIRO NA TELA
-        lista_formatada = "<hr>".join([f"<code>{arq}</code>" for arq in arquivos_espionados]) if arquivos_espionados else "A API não listou nenhum arquivo anexado."
-        
-        html_erro = f"""
-        <h3>Raio-X dos Anexos da Blue Fleet</h3>
-        <p>Veja abaixo o código cru que eles estão enviando. Precisamos achar onde o nome do PDF está escondido:</p>
-        <div style='background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: left; font-family: monospace; overflow-wrap: break-word;'>
-            {lista_formatada}
-        </div>
-        """
-        return html_erro, 404
+        return f"Checklist não encontrado para a placa {placa}. Verifique se o PDF está anexado nas últimas ocorrências.", 404
 
     except Exception as e:
         return f"Erro interno ao buscar checklist: {str(e)}", 500
@@ -184,7 +165,6 @@ def acessar_crlv():
     placa = request.form.get('placa')
     senha = request.form.get('senha')
     
-    # Puxa a senha do cofre (.env)
     senha_segura = os.getenv("PIN_CRLV", "BloqueioEmergenciaNevada2026")
     
     if senha != senha_segura:
