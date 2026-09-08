@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import requests
+import io # Nova importação para manipular o PDF na memória
 from flask import Flask, render_template, request, send_file, jsonify
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -79,17 +80,6 @@ def buscar():
                         for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
                             if placa_titular and placa_titular != placa:
-                                req_id = oc.get("contractItemRequestId")
-                                
-                                if req_id:
-                                    url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
-                                    try:
-                                        r_files = requests.get(url_arquivos, headers=headers)
-                                        if r_files.status_code == 200:
-                                            arquivos_ocorrencia = r_files.json()
-                                    except Exception:
-                                        pass
-
                                 r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
                                 if r_titular.status_code == 200:
                                     lista_titular = r_titular.json().get("data", [])
@@ -99,12 +89,80 @@ def buscar():
             except Exception:
                 pass
 
-        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular, arquivos_ocorrencia=arquivos_ocorrencia)
+        return render_template("resultado.html", veiculo=veiculo, veiculo_titular=veiculo_titular)
 
     except requests.exceptions.HTTPError as err_http:
         return render_template("index.html", erro=f"Falha na comunicação: {err_http}")
     except Exception as e:
         return render_template("index.html", erro=f"Erro interno do sistema: {str(e)}")
+
+
+# --- NOVA ROTA: MOTOR DE BUSCA DO CHECKLIST ---
+@app.route("/checklist/<placa>")
+def buscar_checklist(placa):
+    placa = placa.strip().upper()
+    placa_limpa = placa.replace("-", "") # Fica apenas FOK7B75
+    
+    # Adiciona o traço se vier sem, para buscar na Blue Fleet
+    if len(placa) == 7 and "-" not in placa:
+        placa = f"{placa[:3]}-{placa[3:]}"
+
+    try:
+        token = get_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        # 1. Puxa todas as ocorrências da placa
+        r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
+        if r_ocorrencia.status_code != 200:
+            return "Erro ao buscar histórico de ocorrências.", 500
+            
+        ocorrencias = r_ocorrencia.json().get("data", [])
+        if not ocorrencias:
+            return "Nenhuma ocorrência encontrada para este veículo.", 404
+            
+        # Ordena da mais nova para a mais velha
+        ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+        
+        # 2. Varredura: Entra em ocorrência por ocorrência procurando o PDF
+        for oc in ocorrencias:
+            req_id = oc.get("contractItemRequestId")
+            if not req_id: continue
+                
+            url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
+            r_files = requests.get(url_arquivos, headers=headers)
+            
+            if r_files.status_code == 200:
+                resposta_arquivos = r_files.json()
+                lista_arquivos = resposta_arquivos.get("data", resposta_arquivos) # Tenta pegar .data, se não for, usa a própria lista
+                
+                if isinstance(lista_arquivos, list):
+                    for arquivo in lista_arquivos:
+                        # Extrai o nome do arquivo da API
+                        nome_arquivo = arquivo.get("fileName", arquivo.get("name", "")).upper()
+                        
+                        # Verifica se o arquivo tem a placa (ex: FOK7B75) e é PDF
+                        if placa_limpa in nome_arquivo and nome_arquivo.endswith(".PDF"):
+                            id_arquivo = arquivo.get("id", arquivo.get("fileId"))
+                            
+                            # Faz o download do arquivo em memória
+                            url_download = arquivo.get("url") or f"{API_URL}/contract-item-request/{req_id}/files/{id_arquivo}"
+                            r_pdf = requests.get(url_download, headers=headers)
+                            
+                            if r_pdf.status_code == 200:
+                                return send_file(
+                                    io.BytesIO(r_pdf.content),
+                                    mimetype='application/pdf',
+                                    as_attachment=False,
+                                    download_name=nome_arquivo
+                                )
+                                
+        return f"Checklist não encontrado para a placa {placa}. Verifique se o PDF está anexado nas últimas ocorrências.", 404
+
+    except Exception as e:
+        return f"Erro interno ao buscar checklist: {str(e)}", 500
 
 
 @app.route('/crlv', methods=['POST'])

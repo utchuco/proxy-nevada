@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+[<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -23,7 +23,7 @@
             </div>
         {% endif %}
         
-        <!-- BLOCO 1: O Veículo Pesquisado (Pode ser o Reserva ou Regular) -->
+        <!-- BLOCO 1: O Veículo Pesquisado -->
         <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; {% if veiculo_titular %}border-left: 5px solid #17a2b8;{% endif %}">
             <h3 style="margin-top: 0; color: #0056b3;">
                 {% if veiculo_titular %}🚙 Carro Reserva:{% else %}Veículo:{% endif %} {{ veiculo.licensePlate }}
@@ -49,9 +49,16 @@
             
             <p><strong>Último Km Registrado:</strong> {{ veiculo.informedOdometer }} km</p>
 
-            <div style="margin-top: 15px;">
-                <button onclick="solicitarSenhaCrlv('{{ veiculo.licensePlate }}')" style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
-                    Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
+            <!-- BOTOES DE ACAO DO VEICULO -->
+            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                <!-- NOVO BOTÃO: CHECKLIST -->
+                <button onclick="abrirChecklist('{{ veiculo.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📋 Ver Checklist {{ 'do Reserva' if veiculo_titular else '' }}
+                </button>
+                
+                <!-- BOTÃO: CRLV -->
+                <button onclick="solicitarSenhaCrlv('{{ veiculo.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📄 Ver CRLV {{ 'do Reserva' if veiculo_titular else '' }}
                 </button>
             </div>
         </div>
@@ -71,21 +78,28 @@
 
             <p><strong>Último Km Registrado:</strong> {{ veiculo_titular.informedOdometer }} km</p>
 
-            <div style="margin-top: 15px;">
-                <button onclick="solicitarSenhaCrlv('{{ veiculo_titular.licensePlate }}')" style="padding: 8px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 13px; cursor: pointer; font-weight: bold;">
-                    Ver CRLV do Titular
+            <!-- BOTOES DE ACAO DO VEICULO TITULAR -->
+            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                <!-- NOVO BOTÃO: CHECKLIST TITULAR -->
+                <button onclick="abrirChecklist('{{ veiculo_titular.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📋 Ver Checklist do Titular
+                </button>
+                
+                <!-- BOTÃO: CRLV TITULAR -->
+                <button onclick="solicitarSenhaCrlv('{{ veiculo_titular.licensePlate }}')" style="padding: 10px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
+                    📄 Ver CRLV do Titular
                 </button>
             </div>
         </div>
         {% endif %}
 
-        <!-- Formulário Oculto Único para os dois botões de CRLV -->
+        <!-- Formulário Oculto Único para os botões de CRLV -->
         <form id="formCrlv" action="/crlv" method="POST" target="_blank" style="display: none;">
             <input type="hidden" name="placa" id="inputPlacaCrlv">
             <input type="hidden" name="senha" id="inputSenhaCrlv">
         </form>
 
-        <a href="/" style="display: inline-block; padding: 15px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; width: 100%; box-sizing: border-box; font-size: 16px;">Fazer Nova Busca</a>
+        <a href="/" style="display: inline-block; padding: 15px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; width: 100%; box-sizing: border-box; font-size: 16px; margin-top: 10px;">Fazer Nova Busca</a>
     </div>
 
     <script>
@@ -97,6 +111,24 @@
                 document.getElementById('formCrlv').submit();
             }
         }
+
+        // Função para abrir o Checklist com efeito visual de "Buscando..."
+        function abrirChecklist(placaSelecionada, btnElement) {
+            var textoOriginal = btnElement.innerHTML;
+            btnElement.innerHTML = 'Buscando Checklist... ⏳';
+            btnElement.style.backgroundColor = '#6c757d';
+            btnElement.disabled = true;
+            
+            // Abre o checklist em uma nova aba
+            window.open('/checklist/' + placaSelecionada, '_blank');
+            
+            // Retorna o botão ao normal após 3 segundos
+            setTimeout(function() {
+                btnElement.innerHTML = textoOriginal;
+                btnElement.style.backgroundColor = '#0056b3';
+                btnElement.disabled = false;
+            }, 3000);
+        }
     </script>
 </body>
-</html>
+</html>]
