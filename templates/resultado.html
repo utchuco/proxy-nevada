@@ -17,7 +17,7 @@
         {% if aviso_reserva and not reserva %}
             <div style="margin-bottom: 20px; padding: 15px; background-color: #fff3cd; color: #856404; border-radius: 8px; border-left: 5px solid #ffc107; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                 <h4 style="margin-top: 0; margin-bottom: 5px;">⚠️ Veículo em Manutenção</h4>
-                <p style="font-size: 14px; margin: 0;">Identificamos que um Carro Reserva foi liberado, mas a locadora não exportou a placa dele. Para acessar o Check-list, <strong>faça uma nova busca utilizando a placa física do veículo que está com você.</strong></p>
+                <p style="font-size: 14px; margin: 0;">Identificamos que um Carro Reserva foi liberado, mas a locadora não exportou a placa dele. Para acessar o Check-list, <strong>faça uma nova busca utilizando a placa física do veículo reserva.</strong></p>
             </div>
         {% endif %}
 
@@ -30,7 +30,7 @@
         <!-- BLOCO TITULAR -->
         {% if titular %}
         <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #0056b3;">
-            <h3 style="margin-top: 0; color: #0056b3;">🚙 Carro Titular: {{ titular.licensePlate }}</h3>
+            <h3 style="margin-top: 0; color: #0056b3;">{{ titular.licensePlate }}</h3>
             
             <p><strong>Montadora:</strong> {{ titular.automakerName }}</p>
             <p><strong>Modelo:</strong> {{ titular.vehicleModelName }}</p>
@@ -51,10 +51,10 @@
 
             <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                 <button onclick="abrirChecklist('{{ titular.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📋 Ver Checklist do Titular
+                    Ver Checklist do Titular
                 </button>
                 <button onclick="solicitarSenhaCrlv('{{ titular.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📄 Ver CRLV do Titular
+                    Ver CRLV do Titular
                 </button>
             </div>
         </div>
@@ -63,7 +63,7 @@
         <!-- BLOCO RESERVA -->
         {% if reserva %}
         <div style="text-align: left; background: #fffdf5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <h3 style="margin-top: 0; color: #856404;">🚗 Carro Reserva: {{ reserva.licensePlate }}</h3>
+            <h3 style="margin-top: 0; color: #856404;">Carro Reserva: {{ reserva.licensePlate }}</h3>
 
             <p><strong>Montadora:</strong> {{ reserva.automakerName }}</p>
             <p><strong>Modelo:</strong> {{ reserva.vehicleModelName }}</p>
@@ -77,17 +77,17 @@
 
             <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                 <button onclick="abrirChecklist('{{ reserva.licensePlate }}', this)" style="padding: 10px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📋 Ver Checklist do Reserva
+                    Ver Checklist do Reserva
                 </button>
                 <button onclick="solicitarSenhaCrlv('{{ reserva.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    📄 Ver CRLV do Reserva
+                    Ver CRLV do Reserva
                 </button>
             </div>
         </div>
         {% endif %}
 
         <!-- Formulário Oculto Único para os botões de CRLV -->
-        <form id="formCrlv" action="/crlv" method="POST" target="_blank" style="display: none;">
+        <form id="formCrlv" action="/crlv" method="POST" style="display: none;">
             <input type="hidden" name="placa" id="inputPlacaCrlv">
             <input type="hidden" name="senha" id="inputSenhaCrlv">
         </form>
