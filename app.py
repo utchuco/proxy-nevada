@@ -4,7 +4,7 @@ import base64
 import requests
 import io 
 import re 
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file, jsonify, Response
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -205,11 +205,10 @@ def buscar_checklist(placa):
                                 r_pdf = requests.get(url_api, headers=headers)
                             
                             if r_pdf.status_code == 200:
-                                return send_file(
-                                    io.BytesIO(r_pdf.content),
-                                    mimetype='application/pdf',
-                                    as_attachment=False, 
-                                    download_name=f"Checklist_{placa_limpa}.pdf"
+                                return Response(
+                                    r_pdf.content,
+                                    mimetype='application/pdf', 
+                                    headers={"Content-Disposition": f"inline; filename=Checklist_{placa_limpa}.pdf"}
                                 )
                                 
         return f"Checklist não encontrado para a placa {placa}. Verifique se o PDF está anexado nas últimas ocorrências.", 404
