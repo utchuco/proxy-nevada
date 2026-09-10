@@ -98,13 +98,12 @@ def buscar():
                 pass
 
         # ==========================================
-        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO DIRETA DOS ARQUIVOS)
+        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO + VALIDAÇÃO CRUZADA)
         # ==========================================
         else:
             carro_titular = veiculo_base
             
             try:
-                # 1. Busca as ocorrências do carro que você pesquisou
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
@@ -114,43 +113,54 @@ def buscar():
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
-                        # 2. Entra na pasta de arquivos dessa ocorrência (igualzinho você faz na rota /checklist)
                         r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers)
                         if r_files.status_code == 200:
                             arquivos = r_files.json().get("data", r_files.json())
                             
                             if isinstance(arquivos, list):
                                 for arquivo in arquivos:
-                                    # Pega o nome original do arquivo (Ex: TIT7C95-10.08.26-S.PDF)
                                     nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
-                                    
-                                    # 3. Procura os 7 caracteres da placa no meio do nome do arquivo
                                     match_placa = re.search(r'([A-Z]{3}[ -]?[0-9][A-Z0-9][0-9]{2})', nome_bruto)
                                     
                                     if match_placa:
-                                        # Tira qualquer espaço ou hífen que possa ter vindo no nome do PDF
                                         placa_achada = match_placa.group(1).replace("-", "").replace(" ", "")
                                         
-                                        # 4. A mágica da sua lógica: É diferente da placa do titular? ENTÃO É O RESERVA!
                                         if placa_achada != placa_limpa_base:
-                                            # Formata com o tracinho obrigatório para a API da Blue Fleet não chorar
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
                                             
-                                            # Puxa a ficha do reserva na Blue Fleet e joga na tela!
+                                            # 1. Puxa a ficha da placa suspeita de ser o reserva
                                             r_reserva = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}", headers=headers)
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
-                                                carro_reserva = r_reserva.json().get("data")[0]
-                                                reserva_oculta_detectada = False
-                                                break # Achou o carro, para de procurar arquivos!
+                                                v_teste = r_reserva.json().get("data")[0]
                                                 
+                                                carro_valido_como_reserva = False
+                                                
+                                                # 2. Validação Rápida: Ele está com status 14 agora?
+                                                if str(v_teste.get("vehicleStatusId")) == "14":
+                                                    carro_valido_como_reserva = True
+                                                else:
+                                                    # 3. Validação Profunda (A sua ideia!): Vamos nas ocorrências desse outro carro
+                                                    r_oc_res = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_reserva_api}", headers=headers)
+                                                    if r_oc_res.status_code == 200:
+                                                        for oc_res in r_oc_res.json().get("data", []):
+                                                            # Se na ficha do reserva constar a placa do nosso titular, o vínculo ainda existe!
+                                                            if oc_res.get("licensePlate", "").replace("-", "") == placa_limpa_base:
+                                                                carro_valido_como_reserva = True
+                                                                break
+                                                
+                                                # 4. Se passou no teste duplo, joga na tela!
+                                                if carro_valido_como_reserva:
+                                                    carro_reserva = v_teste
+                                                    reserva_oculta_detectada = False
+                                                    break 
+                                                    
                         if carro_reserva:
-                            break # Achou o carro, para de procurar nas ocorrências!
+                            break 
                             
             except Exception as e:
-                print(f"Erro ao tentar achar o reserva nos arquivos: {e}")
+                print(f"Erro na validação cruzada do reserva: {e}")
                 pass
                 
-            # Mantém o aviso amarelo apenas se o PDF ainda não tiver sido anexado pelo mecânico
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
