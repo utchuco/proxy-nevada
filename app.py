@@ -98,7 +98,7 @@ def buscar():
                 pass
 
         # ==========================================
-        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO VIA CHECKLIST)
+        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO MÁXIMA VIA ARRASTÃO)
         # ==========================================
         else:
             carro_titular = veiculo_base
@@ -108,50 +108,44 @@ def buscar():
                 r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
-                    # Ordena para pegar as mais recentes primeiro
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
-                    # Varre os arquivos das 5 últimas ocorrências (sem filtro de texto)
                     for oc in ocorrencias[:5]:
                         req_id = oc.get("contractItemRequestId")
                         
                         if req_id:
-                            url_arquivos = f"{API_URL}/contract-item-request/{req_id}/files"
-                            r_files = requests.get(url_arquivos, headers=headers)
+                            # 1. Pega TODO o texto da ocorrência (caso o nome do arquivo já venha embutido)
+                            texto_busca = json.dumps(oc).upper().replace("-", "").replace(" ", "")
                             
+                            # 2. Busca também na rota de arquivos por garantia e soma ao texto
+                            r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers)
                             if r_files.status_code == 200:
-                                arquivos = r_files.json().get("data", r_files.json())
+                                texto_busca += r_files.text.upper().replace("-", "").replace(" ", "")
                                 
-                                if isinstance(arquivos, list):
-                                    for arquivo in arquivos:
-                                        nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", ""))))
-                                        nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
-                                        
-                                        # Procura o padrão de placa no nome do arquivo
-                                        match_placa = re.search(r'([A-Z]{3}[0-9][A-Z0-9][0-9]{2})', nome_limpo)
-                                        
-                                        if match_placa:
-                                            placa_extraida = match_placa.group(1)
+                            # 3. Arrastão: Extrai qualquer coisa que seja uma placa (Padrão Antigo ou Mercosul)
+                            placas_encontradas = set(re.findall(r'([A-Z]{3}[0-9][A-Z0-9][0-9]{2})', texto_busca))
+                            
+                            for p in placas_encontradas:
+                                if p != placa_limpa_base:
+                                    # Valida se a placa encontrada é realmente de um reserva (Status 14)
+                                    # Removido o timeout para evitar que a lentidão da API cancele a busca
+                                    r_valida = requests.get(f"{API_URL}/vehicle?LicensePlate={p}", headers=headers)
+                                    
+                                    if r_valida.status_code == 200 and r_valida.json().get("data"):
+                                        v_teste = r_valida.json().get("data")[0]
+                                        if str(v_teste.get("vehicleStatusId")) == "14":
+                                            carro_reserva = v_teste
+                                            reserva_oculta_detectada = False
+                                            break # Achou o reserva! Sai da verificação de placas
                                             
-                                            # Se achou uma placa no PDF e não é a do titular
-                                            if placa_extraida != placa_limpa_base:
-                                                r_valida = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_extraida}", headers=headers, timeout=3)
-                                                if r_valida.status_code == 200 and r_valida.json().get("data"):
-                                                    v_teste = r_valida.json().get("data")[0]
-                                                    
-                                                    # Confirma no sistema se ela é realmente um carro reserva (Status 14)
-                                                    if str(v_teste.get("vehicleStatusId")) == "14":
-                                                        carro_reserva = v_teste
-                                                        break # Achou! Sai do loop de arquivos
-                                                        
                         if carro_reserva:
-                            break # Achou! Sai do loop de ocorrências
+                            break # Achou o reserva! Sai da varredura de ocorrências
                             
             except Exception as e:
                 print(f"Erro na extração do checklist: {e}")
                 pass
                 
-            # Mantém a Lógica do Aviso Amarelo (caso o PDF ainda não tenha sido anexado)
+            # Mantém a Lógica do Aviso Amarelo (caso o PDF do reserva ainda não tenha sido anexado pela mecânica)
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
