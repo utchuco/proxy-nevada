@@ -73,23 +73,42 @@ def buscar():
         reserva_oculta_detectada = False
         placa_limpa_base = placa.replace("-", "")
 
+        import time
+        
+        # Função inteligente que "insiste" na busca caso a API da Blue Fleet engasgue
+        def get_blindado(url):
+            for tentativa in range(3):
+                try:
+                    resp = requests.get(url, headers=headers, timeout=5)
+                    # Só aceita a resposta se a Blue Fleet mandar um 200 (Sucesso Absoluto)
+                    if resp.status_code == 200:
+                        return resp
+                except Exception:
+                    pass
+                # Se falhou ou deu erro 500/429, o código pausa meio segundo e tenta de novo
+                time.sleep(0.5)
+            # Última tentativa de emergência
+            return requests.get(url, headers=headers)
+
         # ==========================================
-        # LÓGICA 1: PESQUISOU O RESERVA (RESTAURADA)
+        # LÓGICA 1: PESQUISOU O RESERVA (RESTAURADA E BLINDADA)
         # ==========================================
         if str(veiculo_base.get("vehicleStatusId")) == "14":
             carro_reserva = veiculo_base
-            # Aqui a API NÃO é cega. Ela entrega a placa do titular perfeitamente no histórico.
+            
             try:
-                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
+                # Usamos o get_blindado para não perder o Titular por falha de rede
+                r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}")
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                         for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
-                            # Se achar uma placa diferente da do Reserva, é o Titular!
+                            
                             if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
-                                r_titular = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers=headers)
+                                # Usamos o get_blindado para puxar a ficha do Titular
+                                r_titular = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_titular}")
                                 if r_titular.status_code == 200 and r_titular.json().get("data"):
                                     carro_titular = r_titular.json().get("data")[0]
                                     break
@@ -103,7 +122,7 @@ def buscar():
             carro_titular = veiculo_base
             
             try:
-                r_ocorrencia = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers=headers)
+                r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}")
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
@@ -112,7 +131,7 @@ def buscar():
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
-                        r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers)
+                        r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files")
                         if r_files.status_code == 200:
                             arquivos = r_files.json().get("data", r_files.json())
                             
@@ -127,42 +146,30 @@ def buscar():
                                         if placa_achada != placa_limpa_base:
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
                                             
-                                            # 1. Puxa a ficha da placa suspeita de ser o reserva
-                                            r_reserva = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}", headers=headers)
+                                            r_reserva = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}")
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 
                                                 carro_valido_como_reserva = False
                                                 
-                                                # 2. Validação Rigorosa: Espelha a Lógica 1 
-                                                # O carro suspeito precisa estar com status 14 HOJE
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
                                                     
-                                                    # 3. Faz a MESMA consulta da Lógica 1 nas ocorrências do carro suspeito
-                                                    r_oc_res = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_reserva_api}", headers=headers)
+                                                    r_oc_res = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_reserva_api}")
                                                     if r_oc_res.status_code == 200:
                                                         ocorrencias_reserva = r_oc_res.json().get("data", [])
-                                                        
-                                                        # Ordena da mais nova para a mais velha (queremos o vínculo ATUAL)
                                                         ocorrencias_reserva.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                                                         
                                                         for oc_res in ocorrencias_reserva:
                                                             placa_apontada = oc_res.get("licensePlate")
                                                             
-                                                            # Procura a primeira ocorrência que aponte para a placa de um titular
                                                             if placa_apontada:
                                                                 placa_apontada_limpa = placa_apontada.replace("-", "").upper()
                                                                 
                                                                 if placa_apontada_limpa != placa_reserva_api.replace("-", "").upper():
-                                                                    
-                                                                    # Confirmação final: a placa titular apontada é a nossa placa da busca?
                                                                     if placa_apontada_limpa == placa_limpa_base:
                                                                         carro_valido_como_reserva = True
-                                                                        
-                                                                    # Para no primeiro vínculo encontrado (o mais recente).
                                                                     break
                                                 
-                                                # 4. Se passou no teste duplo, joga na tela!
                                                 if carro_valido_como_reserva:
                                                     carro_reserva = v_teste
                                                     reserva_oculta_detectada = False
