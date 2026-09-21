@@ -2,7 +2,6 @@ import os
 import json
 import base64
 import requests
-import io 
 import re 
 from flask import Flask, render_template, request, send_file, jsonify, Response
 from dotenv import load_dotenv
@@ -135,18 +134,33 @@ def buscar():
                                                 
                                                 carro_valido_como_reserva = False
                                                 
-                                                # 2. Validação Rápida: Ele está com status 14 agora?
+                                                # 2. Validação Rigorosa: Espelha a Lógica 1 
+                                                # O carro suspeito precisa estar com status 14 HOJE
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
-                                                    carro_valido_como_reserva = True
-                                                else:
-                                                    # 3. Validação Profunda (A sua ideia!): Vamos nas ocorrências desse outro carro
+                                                    
+                                                    # 3. Faz a MESMA consulta da Lógica 1 nas ocorrências do carro suspeito
                                                     r_oc_res = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_reserva_api}", headers=headers)
                                                     if r_oc_res.status_code == 200:
-                                                        for oc_res in r_oc_res.json().get("data", []):
-                                                            # Se na ficha do reserva constar a placa do nosso titular, o vínculo ainda existe!
-                                                            if oc_res.get("licensePlate", "").replace("-", "") == placa_limpa_base:
-                                                                carro_valido_como_reserva = True
-                                                                break
+                                                        ocorrencias_reserva = r_oc_res.json().get("data", [])
+                                                        
+                                                        # Ordena da mais nova para a mais velha (queremos o vínculo ATUAL)
+                                                        ocorrencias_reserva.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+                                                        
+                                                        for oc_res in ocorrencias_reserva:
+                                                            placa_apontada = oc_res.get("licensePlate")
+                                                            
+                                                            # Procura a primeira ocorrência que aponte para a placa de um titular
+                                                            if placa_apontada:
+                                                                placa_apontada_limpa = placa_apontada.replace("-", "").upper()
+                                                                
+                                                                if placa_apontada_limpa != placa_reserva_api.replace("-", "").upper():
+                                                                    
+                                                                    # Confirmação final: a placa titular apontada é a nossa placa da busca?
+                                                                    if placa_apontada_limpa == placa_limpa_base:
+                                                                        carro_valido_como_reserva = True
+                                                                        
+                                                                    # Para no primeiro vínculo encontrado (o mais recente).
+                                                                    break
                                                 
                                                 # 4. Se passou no teste duplo, joga na tela!
                                                 if carro_valido_como_reserva:
