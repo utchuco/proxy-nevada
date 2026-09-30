@@ -116,7 +116,7 @@ def buscar():
                 pass
 
         # ==========================================
-        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO + VALIDAÇÃO ANTI-FANTASMA)
+        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO DIRETA E ORIGINAL)
         # ==========================================
         else:
             carro_titular = veiculo_base
@@ -125,11 +125,11 @@ def buscar():
                 r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}")
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
+                    # Ordena para olhar as ocorrências mais novas primeiro
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
-                    # ANTI-FANTASMA: Só vasculha PDFs nas 5 ocorrências MAIS RECENTES.
-                    # Ignora sinistros velhos que causavam os falsos positivos.
-                    for oc in ocorrencias[:5]:
+                    # Varre TODAS as ocorrências sem limite, até achar o PDF
+                    for oc in ocorrencias:
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
@@ -140,11 +140,14 @@ def buscar():
                             if isinstance(arquivos, list):
                                 for arquivo in arquivos:
                                     nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
+                                    
+                                    # Pega qualquer placa que estiver no nome do arquivo
                                     match_placa = re.search(r'([A-Z]{3}[ -]?[0-9][A-Z0-9][0-9]{2})', nome_bruto)
                                     
                                     if match_placa:
                                         placa_achada = match_placa.group(1).replace("-", "").replace(" ", "")
                                         
+                                        # Se achou um PDF com placa diferente da consultada, joga na API
                                         if placa_achada != placa_limpa_base:
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
                                             
@@ -152,14 +155,14 @@ def buscar():
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 
-                                                # Se achou a placa no PDF recente e é Status 14, ACEITA NA HORA!
+                                                # Se for status 14, valida que é o reserva atual e mostra na tela!
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
                                                     carro_reserva = v_teste
                                                     reserva_oculta_detectada = False
-                                                    break 
+                                                    break # Para de ler os arquivos
                                                     
                         if carro_reserva:
-                            break 
+                            break # Para de ler as ocorrências, pois já achou o reserva
                             
             except Exception as e:
                 print(f"Erro na extração do reserva: {e}")
@@ -168,8 +171,8 @@ def buscar():
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
-                        # Para o aviso amarelo, olhamos só as 3 mais recentes
-                        for oc in ocorrencias[:3]:
+                        # Se não achou nenhum PDF, varre o texto das ocorrências recentes pra dar o aviso amarelo
+                        for oc in ocorrencias[:5]:
                             if "RESERVA" in json.dumps(oc).upper() and "AGUARDANDO DEVOLU" in json.dumps(oc).upper():
                                 reserva_oculta_detectada = True
                                 break
