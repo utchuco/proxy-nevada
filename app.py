@@ -238,10 +238,12 @@ def buscar_checklist(placa):
                 
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
-                        nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", ""))))
-                        nome_limpo = nome_bruto.upper().replace("-", "").replace(" ", "")
+                        nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
                         
-                        if placa_limpa in nome_limpo and placa_limpa != "":
+                        # FUNIL DE CHECKLIST: Começa com a placa, seguida de traço e data (XX.XX.XX)
+                        padrao_checklist = rf"^{placa_limpa}-\d{{2}}\.\d{{2}}\.\d{{2}}"
+                        
+                        if re.search(padrao_checklist, nome_bruto) and placa_limpa != "":
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
                             url_direta = arquivo.get("url")
                             
