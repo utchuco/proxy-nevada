@@ -116,7 +116,7 @@ def buscar():
                 pass
 
         # ==========================================
-        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO + VALIDAÇÃO CRUZADA)
+        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO + VALIDAÇÃO ANTI-FANTASMA)
         # ==========================================
         else:
             carro_titular = veiculo_base
@@ -127,7 +127,9 @@ def buscar():
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
-                    for oc in ocorrencias:
+                    # ANTI-FANTASMA: Só vasculha PDFs nas 5 ocorrências MAIS RECENTES.
+                    # Ignora sinistros velhos que causavam os falsos positivos.
+                    for oc in ocorrencias[:5]:
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
@@ -150,27 +152,8 @@ def buscar():
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 
-                                                carro_valido_como_reserva = False
-                                                
+                                                # Se achou a placa no PDF recente e é Status 14, ACEITA NA HORA!
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
-                                                    
-                                                    r_oc_res = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_reserva_api}")
-                                                    if r_oc_res.status_code == 200:
-                                                        ocorrencias_reserva = r_oc_res.json().get("data", [])
-                                                        ocorrencias_reserva.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                                                        
-                                                        for oc_res in ocorrencias_reserva:
-                                                            placa_apontada = oc_res.get("licensePlate")
-                                                            
-                                                            if placa_apontada:
-                                                                placa_apontada_limpa = placa_apontada.replace("-", "").upper()
-                                                                
-                                                                if placa_apontada_limpa != placa_reserva_api.replace("-", "").upper():
-                                                                    if placa_apontada_limpa == placa_limpa_base:
-                                                                        carro_valido_como_reserva = True
-                                                                    break
-                                                
-                                                if carro_valido_como_reserva:
                                                     carro_reserva = v_teste
                                                     reserva_oculta_detectada = False
                                                     break 
@@ -179,13 +162,14 @@ def buscar():
                             break 
                             
             except Exception as e:
-                print(f"Erro na validação cruzada do reserva: {e}")
+                print(f"Erro na extração do reserva: {e}")
                 pass
                 
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
-                        for oc in r_ocorrencia.json().get("data", []):
+                        # Para o aviso amarelo, olhamos só as 3 mais recentes
+                        for oc in ocorrencias[:3]:
                             if "RESERVA" in json.dumps(oc).upper() and "AGUARDANDO DEVOLU" in json.dumps(oc).upper():
                                 reserva_oculta_detectada = True
                                 break
