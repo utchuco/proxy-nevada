@@ -111,7 +111,7 @@ def buscar():
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                        for oc in ocorrencias:
+                        for oc in ocorrencias[:20]: # Limita a 20 ocorrências recentes
                             time.sleep(0.2) # <-- FREIO DE MÃO
                             placa_titular = oc.get("licensePlate")
                             
