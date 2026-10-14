@@ -59,28 +59,36 @@ def buscar():
         
         import time
         
-        # Função inteligente que "insiste" na busca e respeita o bloqueio 429
-        def get_blindado(url):
-            for tentativa in range(3):
+        # Função blindada COM DUAS MARCHAS para evitar o corte de 30s do servidor
+        def get_blindado(url, rapido=False):
+            # Se for rapido=True (para os PDFs), tenta menos vezes e com tempo de limite menor
+            tentativas = 1 if rapido else 3
+            tempo_limite = 3 if rapido else 5
+            
+            for tentativa in range(tentativas):
                 try:
-                    resp = requests.get(url, headers=headers, timeout=5)
-                    # Só aceita a resposta se a Blue Fleet mandar um 200 (Sucesso Absoluto)
+                    resp = requests.get(url, headers=headers, timeout=tempo_limite)
                     if resp.status_code == 200:
                         return resp
                     elif resp.status_code == 429:
-                        # Se a Blue Fleet pedir pra ir devagar, o servidor pausa 2 segundos
-                        time.sleep(2)
+                        time.sleep(1) # Se bloqueado, aguarda apenas 1 segundo
                 except Exception:
                     pass
-                # Se falhou ou deu erro 500, o código pausa meio segundo e tenta de novo
-                time.sleep(0.5)
+                if not rapido:
+                    time.sleep(0.5)
+            
             # Última tentativa de emergência
-            return requests.get(url, headers=headers)
+            try:
+                return requests.get(url, headers=headers, timeout=tempo_limite)
+            except Exception:
+                # Se falhar, devolve um falso 500 para não estourar o código principal
+                resp_erro = requests.Response()
+                resp_erro.status_code = 500
+                return resp_erro
 
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
         response = get_blindado(url_busca)
         
-        # Tratamento amigável caso a gente ainda esteja no castigo da Blue Fleet
         if response.status_code == 429:
             return render_template("index.html", erro="A Blue Fleet limitou nossas buscas por excesso de requisições. Aguarde 1 minutinho e tente novamente.")
             
@@ -99,24 +107,21 @@ def buscar():
         placa_limpa_base = placa.replace("-", "")
 
         # ==========================================
-        # LÓGICA 1: PESQUISOU O RESERVA (RESTAURADA E BLINDADA)
+        # LÓGICA 1: PESQUISOU O RESERVA
         # ==========================================
         if str(veiculo_base.get("vehicleStatusId")) == "14":
             carro_reserva = veiculo_base
             
             try:
-                # Usamos o get_blindado para não perder o Titular por falha de rede
                 r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}")
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                        for oc in ocorrencias[:20]: # Limita a 20 ocorrências recentes
-                            time.sleep(0.2) # <-- FREIO DE MÃO
+                        for oc in ocorrencias:
                             placa_titular = oc.get("licensePlate")
                             
                             if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
-                                # Usamos o get_blindado para puxar a ficha do Titular
                                 r_titular = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_titular}")
                                 if r_titular.status_code == 200 and r_titular.json().get("data"):
                                     carro_titular = r_titular.json().get("data")[0]
@@ -125,7 +130,7 @@ def buscar():
                 pass
 
         # ==========================================
-        # LÓGICA 2: PESQUISOU O TITULAR (EXTRAÇÃO DIRETA E ORIGINAL)
+        # LÓGICA 2: PESQUISOU O TITULAR
         # ==========================================
         else:
             carro_titular = veiculo_base
@@ -134,16 +139,16 @@ def buscar():
                 r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}")
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
-                    # Ordena para olhar as ocorrências mais novas primeiro
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
-                    # Varre TODAS as ocorrências sem limite, até achar o PDF
-                    for oc in ocorrencias:
-                        time.sleep(0.2) # <-- FREIO DE MÃO
+                    # TETO DE SEGURANÇA MÁXIMO: Limite de 10 ocorrências para NUNCA travar o servidor
+                    for oc in ocorrencias[:10]:
+                        time.sleep(0.1) # Freio sutil
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
-                        r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files")
+                        # MODO RÁPIDO: Não dorme e nem enrosca se a Blue Fleet não mandar o PDF rápido
+                        r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files", rapido=True)
                         if r_files.status_code == 200:
                             arquivos = r_files.json().get("data", r_files.json())
                             
@@ -151,28 +156,26 @@ def buscar():
                                 for arquivo in arquivos:
                                     nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
                                     
-                                    # Pega qualquer placa que estiver no nome do arquivo
                                     match_placa = re.search(r'([A-Z]{3}[ -]?[0-9][A-Z0-9][0-9]{2})', nome_bruto)
                                     
                                     if match_placa:
                                         placa_achada = match_placa.group(1).replace("-", "").replace(" ", "")
                                         
-                                        # Se achou um PDF com placa diferente da consultada, joga na API
                                         if placa_achada != placa_limpa_base:
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
                                             
+                                            # Aqui voltamos à precisão total para confirmar o carro achado
                                             r_reserva = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}")
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 
-                                                # Se for status 14, valida que é o reserva atual e mostra na tela!
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
                                                     carro_reserva = v_teste
                                                     reserva_oculta_detectada = False
-                                                    break # Para de ler os arquivos
+                                                    break 
                                                     
                         if carro_reserva:
-                            break # Para de ler as ocorrências, pois já achou o reserva
+                            break 
                             
             except Exception as e:
                 print(f"Erro na extração do reserva: {e}")
@@ -181,7 +184,7 @@ def buscar():
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
-                        # Se não achou nenhum PDF, varre o texto das ocorrências recentes pra dar o aviso amarelo
+                        # Busca apenas nas mais recentes o aviso amarelo
                         for oc in ocorrencias[:5]:
                             if "RESERVA" in json.dumps(oc).upper() and "AGUARDANDO DEVOLU" in json.dumps(oc).upper():
                                 reserva_oculta_detectada = True
@@ -237,7 +240,6 @@ def buscar_checklist(placa):
                     for arquivo in lista_arquivos:
                         nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
                         
-                        # FUNIL DE CHECKLIST: Começa com a placa, seguida de traço e data (XX.XX.XX)
                         padrao_checklist = rf"^{placa_limpa}-\d{{2}}\.\d{{2}}\.\d{{2}}"
                         
                         if re.search(padrao_checklist, nome_bruto) and placa_limpa != "":
