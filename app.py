@@ -57,8 +57,33 @@ def buscar():
             "Accept": "application/json"
         }
         
+        import time
+        
+        # Função inteligente que "insiste" na busca e respeita o bloqueio 429
+        def get_blindado(url):
+            for tentativa in range(3):
+                try:
+                    resp = requests.get(url, headers=headers, timeout=5)
+                    # Só aceita a resposta se a Blue Fleet mandar um 200 (Sucesso Absoluto)
+                    if resp.status_code == 200:
+                        return resp
+                    elif resp.status_code == 429:
+                        # Se a Blue Fleet pedir pra ir devagar, o servidor pausa 2 segundos
+                        time.sleep(2)
+                except Exception:
+                    pass
+                # Se falhou ou deu erro 500, o código pausa meio segundo e tenta de novo
+                time.sleep(0.5)
+            # Última tentativa de emergência
+            return requests.get(url, headers=headers)
+
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
-        response = requests.get(url_busca, headers=headers)
+        response = get_blindado(url_busca)
+        
+        # Tratamento amigável caso a gente ainda esteja no castigo da Blue Fleet
+        if response.status_code == 429:
+            return render_template("index.html", erro="A Blue Fleet limitou nossas buscas por excesso de requisições. Aguarde 1 minutinho e tente novamente.")
+            
         response.raise_for_status()
         
         lista_veiculos = response.json().get("data", [])
@@ -72,23 +97,6 @@ def buscar():
         carro_reserva = None
         reserva_oculta_detectada = False
         placa_limpa_base = placa.replace("-", "")
-
-        import time
-        
-        # Função inteligente que "insiste" na busca caso a API da Blue Fleet engasgue
-        def get_blindado(url):
-            for tentativa in range(3):
-                try:
-                    resp = requests.get(url, headers=headers, timeout=5)
-                    # Só aceita a resposta se a Blue Fleet mandar um 200 (Sucesso Absoluto)
-                    if resp.status_code == 200:
-                        return resp
-                except Exception:
-                    pass
-                # Se falhou ou deu erro 500/429, o código pausa meio segundo e tenta de novo
-                time.sleep(0.5)
-            # Última tentativa de emergência
-            return requests.get(url, headers=headers)
 
         # ==========================================
         # LÓGICA 1: PESQUISOU O RESERVA (RESTAURADA E BLINDADA)
@@ -104,6 +112,7 @@ def buscar():
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                         for oc in ocorrencias:
+                            time.sleep(0.2) # <-- FREIO DE MÃO
                             placa_titular = oc.get("licensePlate")
                             
                             if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
@@ -130,6 +139,7 @@ def buscar():
                     
                     # Varre TODAS as ocorrências sem limite, até achar o PDF
                     for oc in ocorrencias:
+                        time.sleep(0.2) # <-- FREIO DE MÃO
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
