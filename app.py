@@ -337,6 +337,120 @@ def receber_checklist():
         "id_aprovacao": novo_pendente["id_aprovacao"]
     }), 200
 
+@app.route("/painel-nevada", methods=["GET"])
+def painel_nevada():
+    caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
+    pendentes = []
+    
+    if os.path.exists(caminho_pendentes):
+        try:
+            with open(caminho_pendentes, 'r', encoding='utf-8') as f:
+                pendentes = json.load(f)
+        except Exception:
+            pass
+            
+    return render_template("painel.html", checklists=pendentes)
+
+@app.route("/painel-nevada/aprovar/<id_aprovacao>", methods=["POST"])
+def painel_aprovar(id_aprovacao):
+    caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
+    if not os.path.exists(caminho_pendentes):
+        return jsonify({"isSuccess": False, "erro": "Nenhum checklist pendente."}), 404
+        
+    try:
+        with open(caminho_pendentes, 'r', encoding='utf-8') as f:
+            pendentes = json.load(f)
+    except Exception:
+        return jsonify({"isSuccess": False, "erro": "Erro ao ler arquivo."}), 500
+        
+    # Acha o checklist correspondente pelo ID único
+    checklist_alvo = None
+    nova_fila = []
+    for item in pendentes:
+        if item.get("id_aprovacao") == id_aprovacao:
+            checklist_alvo = item
+        else:
+            nova_fila.append(item)
+            
+    if not checklist_alvo:
+        return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
+        
+    placa = checklist_alvo.get("placa")
+    
+    try:
+        token = get_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # 1. Descobre o ContractItemId do carro pela placa
+        r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa}", headers=headers)
+        r_veiculo.raise_for_status()
+        veiculos = r_veiculo.json().get("data", [])
+        
+        if not veiculos or not veiculos[0].get("contractItemId"):
+            return jsonify({"isSuccess": False, "erro": f"Carro {placa} não encontrado ou sem contrato ativo na API."}), 400
+            
+        contract_item_id = veiculos[0].get("contractItemId")
+        
+        # 2. Monta o payload exato que testamos e deu SUCESSO
+        payload_bluefleet = {
+            "contractItemRequestReasonId": checklist_alvo.get("motivo_id"),
+            "contractItemRequestReasonClassId": checklist_alvo.get("motivo_classe"),
+            "maintenance": {
+                "currentOdometer": int(checklist_alvo.get("km_atual", 0)),
+                "description": checklist_alvo.get("descricao"),
+                "providerId": 197, # Oficina Nevada
+                "scheduledFor": checklist_alvo.get("data_agendamento"),
+                "scheduling1": checklist_alvo.get("data_agendamento"),
+                "city": "Guarulhos",
+                "state": "SP",
+                "country": "BR",
+                "latitude": -23.4656,
+                "longitude": -46.5330,
+                "requesterName": checklist_alvo.get("solicitante"),
+                "requesterPhone": checklist_alvo.get("telefone"),
+                "requesterEmail": checklist_alvo.get("email")
+            },
+            "files": []
+        }
+        
+        # 3. Dispara para a Blue Fleet
+        url_criacao = f"{API_URL}/contract-item/{contract_item_id}/contract-item-request"
+        resp_bf = requests.post(url_criacao, headers=headers, json=payload_bluefleet)
+        
+        if resp_bf.status_code == 200:
+            # Remove o item da geladeira após o sucesso absoluto
+            with open(caminho_pendentes, 'w', encoding='utf-8') as f:
+                json.dump(nova_fila, f, ensure_ascii=False, indent=4)
+            return jsonify({"isSuccess": True, "mensagem": f"Ocorrência criada com sucesso para a placa {placa}!"}), 200
+        else:
+            return jsonify({"isSuccess": False, "erro": f"Blue Fleet recusou: {resp_bf.text}"}), 400
+            
+    except Exception as e:
+        return jsonify({"isSuccess": False, "erro": f"Erro interno ao disparar: {str(e)}"}), 500
+
+@app.route("/painel-nevada/rejeitar/<id_aprovacao>", methods=["POST"])
+def painel_rejeitar(id_aprovacao):
+    caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
+    if not os.path.exists(caminho_pendentes):
+        return jsonify({"isSuccess": False, "erro": "Nenhum checklist pendente."}), 404
+        
+    try:
+        with open(caminho_pendentes, 'r', encoding='utf-8') as f:
+            pendentes = json.load(f)
+    except Exception:
+        return jsonify({"isSuccess": False, "erro": "Erro ao ler arquivo."}), 500
+        
+    nova_fila = [item for item in pendentes if item.get("id_aprovacao") != id_aprovacao]
+    
+    with open(caminho_pendentes, 'w', encoding='utf-8') as f:
+        json.dump(nova_fila, f, ensure_ascii=False, indent=4)
+        
+    return jsonify({"isSuccess": True, "mensagem": "Checklist descartado com sucesso."}), 200
+
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
     busca = request.args.get("q", "").strip().upper().replace("-", "")
