@@ -291,6 +291,52 @@ def acessar_crlv():
     
     return f"Documento não encontrado para a placa {placa}.", 404
 
+@app.route("/api/receber-checklist", methods=["POST"])
+def receber_checklist():
+    dados = request.get_json()
+    
+    if not dados or not dados.get("placa"):
+        return jsonify({"isSuccess": False, "erro": "Dados ou placa ausentes."}), 400
+
+    agora_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    
+    novo_pendente = {
+        "id_aprovacao": str(uuid.uuid4()),
+        "placa": dados.get("placa").upper().replace("-", ""),
+        "km_atual": dados.get("km"),
+        "motivo_id": dados.get("motivo_id", "CorrectiveMaintenance"),
+        "motivo_classe": dados.get("motivo_classe", "CorrectiveMaintenanceVehicleWontStart"),
+        "descricao": dados.get("descricao", ""),
+        # Dados obrigatórios da Blue Fleet que estavam faltando:
+        "data_agendamento": dados.get("data_agendamento", agora_iso),
+        "solicitante": dados.get("solicitante", "Equipe Nevada"),
+        "telefone": dados.get("telefone", "11999999999"),
+        "email": dados.get("email", "frota@locadoranevada.com.br"),
+        "data_recebimento": agora_iso,
+        "status": "Aguardando Aprovação"
+    }
+    
+    caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
+    
+    fila_pendentes = []
+    if os.path.exists(caminho_pendentes):
+        try:
+            with open(caminho_pendentes, 'r', encoding='utf-8') as f:
+                fila_pendentes = json.load(f)
+        except Exception:
+            pass
+            
+    fila_pendentes.append(novo_pendente)
+    
+    with open(caminho_pendentes, 'w', encoding='utf-8') as f:
+        json.dump(fila_pendentes, f, ensure_ascii=False, indent=4)
+        
+    return jsonify({
+        "isSuccess": True, 
+        "mensagem": "Checklist completo recebido e guardado para aprovação!",
+        "id_aprovacao": novo_pendente["id_aprovacao"]
+    }), 200
+
 @app.route("/api/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
     busca = request.args.get("q", "").strip().upper().replace("-", "")
