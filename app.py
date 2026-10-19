@@ -472,11 +472,11 @@ def painel_aprovar(id_aprovacao):
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
-        # 4. Bloco de Manutenção garantindo a chave correta de agendamento do Swagger
+        # 4. Bloco de Manutenção garantindo a leitura do agendamento
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
-            "providerId": 197,  # Oficina Nevada
+            "providerId": 197,
             "city": "Guarulhos",
             "state": "SP",
             "country": "BR",
@@ -485,9 +485,20 @@ def painel_aprovar(id_aprovacao):
             "requesterName": solicitante,
             "requesterPhone": telefone,
             "requesterEmail": email,
-            "schedulingDate1": data_iso,  # A chave que o JSON deles realmente espera
-            "scheduling1": data_iso,      # Mantemos por segurança
-            "pickupDate": data_iso
+            "pickupDate": data_iso,
+            
+            # --- TÁTICA DA METRALHADORA (Uma dessas é a chave certa) ---
+            "scheduling1": data_iso,
+            "Scheduling1": data_iso,
+            "schedulingDate1": data_iso,
+            "SchedulingDate1": data_iso,
+            "schedule1": data_iso,
+            "Schedule1": data_iso,
+            "scheduling": data_iso,
+            "date1": data_iso,
+            "appointment1": data_iso,
+            "scheduling_1": data_iso,
+            "maintenanceScheduling1": data_iso
         }
 
         if tipo_veiculo == "alugado":
