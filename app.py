@@ -371,8 +371,14 @@ def painel_aprovar(id_aprovacao):
     if not checklist_alvo:
         return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
         
-    placa = checklist_alvo.get("placa")
+    placa = checklist_alvo.get("placa", "").strip().upper()
     tipo_veiculo = checklist_alvo.get("tipo_veiculo", "alugado")
+    
+    # Garante o hífen para a API da Blue Fleet (ex: UGK-7I93)
+    if len(placa) == 7 and "-" not in placa:
+        placa_api = f"{placa[:3]}-{placa[3:]}"
+    else:
+        placa_api = placa
     
     try:
         token = get_access_token()
