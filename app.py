@@ -387,24 +387,40 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 1. Resolve o ContractItemId do carro na Blue Fleet de forma blindada
+        # 1. Resolve o ContractItemId de forma infalível
         contract_item_id = None
         
-        # Tentativa A: direto no endpoint de itens de contrato
-        r_ci = requests.get(f"{API_URL}/contract-item?LicensePlate={placa_api}", headers=headers)
-        if r_ci.status_code == 200:
-            itens = r_ci.json().get("data", [])
-            if itens:
-                contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+        # Estratégia 1: Procura pelo histórico de ocorrências da placa
+        r_oc = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers=headers)
+        if r_oc.status_code == 200:
+            ocs = r_oc.json().get("data", [])
+            for oc in ocs:
+                if oc.get("contractItemId"):
+                    contract_item_id = oc.get("contractItemId")
+                    break
         
-        # Tentativa B: fallback no endpoint de veículos caso a A não retorne
+        # Estratégia 2: Se não houver histórico, busca via contrato do carro
         if not contract_item_id:
-            r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
-            if r_veiculo.status_code == 200:
-                veiculos = r_veiculo.json().get("data", [])
+            r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
+            if r_veic.status_code == 200:
+                veiculos = r_veic.json().get("data", [])
                 if veiculos:
-                    contract_item_id = veiculos[0].get("contractItemId")
+                    contrato = veiculos[0].get("contract") or {}
+                    contrato_id = contrato.get("contractId")
+                    veiculo_id = veiculos[0].get("vehicleId")
                     
+                    if contrato_id:
+                        r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers)
+                        if r_items.status_code == 200:
+                            itens = r_items.json().get("data", r_items.json())
+                            if isinstance(itens, list):
+                                for item_c in itens:
+                                    if item_c.get("vehicleId") == veiculo_id:
+                                        contract_item_id = item_c.get("contractItemId") or item_c.get("id")
+                                        break
+                                if not contract_item_id and itens:
+                                    contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
