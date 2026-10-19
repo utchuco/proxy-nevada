@@ -472,7 +472,7 @@ def painel_aprovar(id_aprovacao):
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
-        # 4. Bloco de Manutenção garantindo scheduling1 preenchido e pickupDate
+        # 4. Bloco de Manutenção garantindo a chave correta de agendamento do Swagger
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
@@ -485,7 +485,8 @@ def painel_aprovar(id_aprovacao):
             "requesterName": solicitante,
             "requesterPhone": telefone,
             "requesterEmail": email,
-            "scheduling1": data_iso,
+            "schedulingDate1": data_iso,  # A chave que o JSON deles realmente espera
+            "scheduling1": data_iso,      # Mantemos por segurança
             "pickupDate": data_iso
         }
 
