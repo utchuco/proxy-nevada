@@ -117,7 +117,6 @@ def buscar():
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                         for oc in ocorrencias:
-                            time.sleep(0.2)
                             placa_titular = oc.get("licensePlate")
                             
                             if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
@@ -297,7 +296,7 @@ def receber_checklist():
     
     novo_pendente = {
         "id_aprovacao": str(uuid.uuid4()),
-        "placa": dados.get("placa").upper().replace("-", ""),
+        "placa": dados.get("placa").upper().replace("-", "").strip(),
         "km_atual": dados.get("km"),
         "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(), # "disponivel" ou "alugado"
         "motivo_id": str(dados.get("motivo_id", "1")),
@@ -374,7 +373,7 @@ def painel_aprovar(id_aprovacao):
     placa = checklist_alvo.get("placa", "").strip().upper()
     tipo_veiculo = checklist_alvo.get("tipo_veiculo", "alugado")
     
-    # Garante o hífen para a API da Blue Fleet (ex: UGK-7I93)
+    # Formata a placa com hífen para a consulta na Blue Fleet (ex: UGK-7I93)
     if len(placa) == 7 and "-" not in placa:
         placa_api = f"{placa[:3]}-{placa[3:]}"
     else:
@@ -388,23 +387,23 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 1. Resolve o ContractItemId do carro na Blue Fleet
-        r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa}", headers=headers)
+        # 1. Resolve o ContractItemId do carro na Blue Fleet usando a placa formatada
+        r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
         r_veiculo.raise_for_status()
         veiculos = r_veiculo.json().get("data", [])
         
         if not veiculos or not veiculos[0].get("contractItemId"):
-            return jsonify({"isSuccess": False, "erro": f"Carro {placa} não encontrado ou sem contrato ativo na API."}), 400
+            return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não encontrado ou sem contrato ativo na API."}), 400
             
         contract_item_id = veiculos[0].get("contractItemId")
         
-        # 2. Constrói o Payload dinamicamente com base nas regras validadas
+        # 2. Constrói o Payload dinamicamente com base no tipo de manutenção e veículo
         is_revisao = str(checklist_alvo.get("motivo_id")) in ["1", "PreventiveMaintenance"]
         data_agendamento = checklist_alvo.get("data_agendamento")
         
         bloco_manutencao = {
             "currentOdometer": int(checklist_alvo.get("km_atual", 0)),
-            "description": checklist_alvo.get("descricao", "Revisão"),
+            "description": checklist_alvo.get("descricao", "Manutenção"),
             "providerId": 197, # Oficina Nevada
             "scheduledFor": data_agendamento,
             "city": "Guarulhos",
@@ -414,10 +413,9 @@ def painel_aprovar(id_aprovacao):
             "longitude": -46.5330
         }
         
-        # Regras de Veículo Alugado (com cliente) vs. Disponível (pátio)
         if tipo_veiculo == "alugado":
-            bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante", "Cliente")
-            bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone", "")
+            bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante", "Equipe Nevada")
+            bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone", "11999999999")
             bloco_manutencao["requesterEmail"] = checklist_alvo.get("email", "")
             bloco_manutencao["scheduleDate1"] = data_agendamento
             bloco_manutencao["updateContractItemDriver"] = False
@@ -435,7 +433,6 @@ def painel_aprovar(id_aprovacao):
             "files": []
         }
         
-        # Se for revisão preventiva, amarra o plano de manutenção
         if is_revisao:
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
             payload_bluefleet["maintenancePlanRevisionId"] = checklist_alvo.get("plano_revisao_id", "149")
@@ -447,7 +444,7 @@ def painel_aprovar(id_aprovacao):
         if resp_bf.status_code == 200:
             with open(caminho_pendentes, 'w', encoding='utf-8') as f:
                 json.dump(nova_fila, f, ensure_ascii=False, indent=4)
-            return jsonify({"isSuccess": True, "mensagem": f"Ocorrência criada com sucesso para a placa {placa}!"}), 200
+            return jsonify({"isSuccess": True, "mensagem": f"Ocorrência criada com sucesso para a placa {placa_api}!"}), 200
         else:
             return jsonify({"isSuccess": False, "erro": f"Blue Fleet recusou: {resp_bf.text}"}), 400
             
