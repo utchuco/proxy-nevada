@@ -398,22 +398,27 @@ def painel_aprovar(id_aprovacao):
     else:
         placa_api = placa
     
-    # 1. Tratamento da Data: garante sempre ISO UTC com .000Z válido e futuro
+    # 1. Tratamento da Data: Garante SEMPRE data válida em formato ISO UTC com .000Z
+    amanha_utc = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
+    
     dt_input = (edicoes.get("data_agendamento") or "").strip()
     if dt_input:
         try:
             dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
             data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00.000Z")
         except Exception:
-            data_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
+            data_iso = amanha_utc
     else:
         raw_agendamento = checklist_alvo.get("data_agendamento")
         if raw_agendamento and "T" in str(raw_agendamento):
             data_iso = str(raw_agendamento)
         else:
-            data_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
+            data_iso = amanha_utc
 
-    # 2. Mapeamento dos enums oficiais da Blue Fleet
+    if not data_iso or len(str(data_iso).strip()) < 10:
+        data_iso = amanha_utc
+
+    # 2. Mapeamento de motivos e classes oficiais do Swagger Blue Fleet
     motivo_str = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "2"))
     if motivo_str in ["2", "CorrectiveMaintenance"]:
         motivo_id = 2  # CorrectiveMaintenance
@@ -467,7 +472,7 @@ def painel_aprovar(id_aprovacao):
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
-        # 4. Bloco de Manutenção oficial com scheduling1 e pickupDate
+        # 4. Bloco de Manutenção garantindo scheduling1 preenchido e pickupDate
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
