@@ -491,17 +491,19 @@ def painel_aprovar(id_aprovacao):
             "scheduling1": data_iso
         }
 
-        if tipo_veiculo == "alugado":
-            bloco_manutencao["updateContractItemDriver"] = False
-            bloco_manutencao["hasPickUpReturnService"] = checklist_alvo.get("leva_e_traz", False)
-            
+        # Monta a raiz do Payload primeiro
         payload_bluefleet = {
             "contractItemRequestReasonId": motivo_id,
             "contractItemRequestReasonClassId": classe_id,
             "maintenance": bloco_manutencao,
             "files": []
         }
-        
+
+        # Adiciona variáveis extras NA RAIZ do JSON (e nunca dentro da manutenção)
+        if tipo_veiculo == "alugado":
+            payload_bluefleet["updateContractItemDriver"] = False
+            payload_bluefleet["hasPickUpReturnService"] = checklist_alvo.get("leva_e_traz", False)
+            
         if is_revisao:
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
             payload_bluefleet["maintenancePlanRevisionId"] = checklist_alvo.get("plano_revisao_id", "149")
