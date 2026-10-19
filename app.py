@@ -3,6 +3,8 @@ import json
 import base64
 import requests
 import re 
+from datetime import datetime, timezone
+import uuid
 from flask import Flask, render_template, request, send_file, jsonify, Response
 from dotenv import load_dotenv
 from flask_limiter import Limiter
@@ -59,9 +61,7 @@ def buscar():
         
         import time
         
-        # Função blindada COM DUAS MARCHAS para evitar o corte de 30s do servidor
         def get_blindado(url, rapido=False):
-            # Se for rapido=True (para os PDFs), tenta menos vezes e com tempo de limite menor
             tentativas = 1 if rapido else 3
             tempo_limite = 3 if rapido else 5
             
@@ -71,17 +71,15 @@ def buscar():
                     if resp.status_code == 200:
                         return resp
                     elif resp.status_code == 429:
-                        time.sleep(1) # Se bloqueado, aguarda apenas 1 segundo
+                        time.sleep(1)
                 except Exception:
                     pass
                 if not rapido:
                     time.sleep(0.5)
             
-            # Última tentativa de emergência
             try:
                 return requests.get(url, headers=headers, timeout=tempo_limite)
             except Exception:
-                # Se falhar, devolve um falso 500 para não estourar o código principal
                 resp_erro = requests.Response()
                 resp_erro.status_code = 500
                 return resp_erro
@@ -119,6 +117,7 @@ def buscar():
                     if ocorrencias:
                         ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                         for oc in ocorrencias:
+                            time.sleep(0.2)
                             placa_titular = oc.get("licensePlate")
                             
                             if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
@@ -141,13 +140,11 @@ def buscar():
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
                     
-                    # TETO DE SEGURANÇA MÁXIMO: Limite de 10 ocorrências para NUNCA travar o servidor
                     for oc in ocorrencias[:10]:
-                        time.sleep(0.1) # Freio sutil
+                        time.sleep(0.1)
                         req_id = oc.get("contractItemRequestId")
                         if not req_id: continue
                         
-                        # MODO RÁPIDO: Não dorme e nem enrosca se a Blue Fleet não mandar o PDF rápido
                         r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files", rapido=True)
                         if r_files.status_code == 200:
                             arquivos = r_files.json().get("data", r_files.json())
@@ -164,7 +161,6 @@ def buscar():
                                         if placa_achada != placa_limpa_base:
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
                                             
-                                            # Aqui voltamos à precisão total para confirmar o carro achado
                                             r_reserva = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}")
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
@@ -184,7 +180,6 @@ def buscar():
             if not carro_reserva:
                 try:
                     if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
-                        # Busca apenas nas mais recentes o aviso amarelo
                         for oc in ocorrencias[:5]:
                             if "RESERVA" in json.dumps(oc).upper() and "AGUARDANDO DEVOLU" in json.dumps(oc).upper():
                                 reserva_oculta_detectada = True
@@ -304,14 +299,16 @@ def receber_checklist():
         "id_aprovacao": str(uuid.uuid4()),
         "placa": dados.get("placa").upper().replace("-", ""),
         "km_atual": dados.get("km"),
-        "motivo_id": dados.get("motivo_id", "CorrectiveMaintenance"),
-        "motivo_classe": dados.get("motivo_classe", "CorrectiveMaintenanceVehicleWontStart"),
-        "descricao": dados.get("descricao", ""),
-        # Dados obrigatórios da Blue Fleet que estavam faltando:
+        "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(), # "disponivel" ou "alugado"
+        "motivo_id": str(dados.get("motivo_id", "1")),
+        "motivo_classe": str(dados.get("motivo_classe", "1")),
+        "plano_revisao_id": str(dados.get("plano_revisao_id", "149")),
+        "descricao": dados.get("descricao", "Revisão preventiva"),
         "data_agendamento": dados.get("data_agendamento", agora_iso),
         "solicitante": dados.get("solicitante", "Equipe Nevada"),
         "telefone": dados.get("telefone", "11999999999"),
-        "email": dados.get("email", "frota@locadoranevada.com.br"),
+        "email": dados.get("email", ""),
+        "leva_e_traz": bool(dados.get("leva_e_traz", False)),
         "data_recebimento": agora_iso,
         "status": "Aguardando Aprovação"
     }
@@ -363,7 +360,6 @@ def painel_aprovar(id_aprovacao):
     except Exception:
         return jsonify({"isSuccess": False, "erro": "Erro ao ler arquivo."}), 500
         
-    # Acha o checklist correspondente pelo ID único
     checklist_alvo = None
     nova_fila = []
     for item in pendentes:
@@ -376,6 +372,7 @@ def painel_aprovar(id_aprovacao):
         return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
         
     placa = checklist_alvo.get("placa")
+    tipo_veiculo = checklist_alvo.get("tipo_veiculo", "alugado")
     
     try:
         token = get_access_token()
@@ -385,7 +382,7 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 1. Descobre o ContractItemId do carro pela placa
+        # 1. Resolve o ContractItemId do carro na Blue Fleet
         r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa}", headers=headers)
         r_veiculo.raise_for_status()
         veiculos = r_veiculo.json().get("data", [])
@@ -395,34 +392,53 @@ def painel_aprovar(id_aprovacao):
             
         contract_item_id = veiculos[0].get("contractItemId")
         
-        # 2. Monta o payload exato que testamos e deu SUCESSO
+        # 2. Constrói o Payload dinamicamente com base nas regras validadas
+        is_revisao = str(checklist_alvo.get("motivo_id")) in ["1", "PreventiveMaintenance"]
+        data_agendamento = checklist_alvo.get("data_agendamento")
+        
+        bloco_manutencao = {
+            "currentOdometer": int(checklist_alvo.get("km_atual", 0)),
+            "description": checklist_alvo.get("descricao", "Revisão"),
+            "providerId": 197, # Oficina Nevada
+            "scheduledFor": data_agendamento,
+            "city": "Guarulhos",
+            "state": "SP",
+            "country": "BR",
+            "latitude": -23.4656,
+            "longitude": -46.5330
+        }
+        
+        # Regras de Veículo Alugado (com cliente) vs. Disponível (pátio)
+        if tipo_veiculo == "alugado":
+            bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante", "Cliente")
+            bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone", "")
+            bloco_manutencao["requesterEmail"] = checklist_alvo.get("email", "")
+            bloco_manutencao["scheduleDate1"] = data_agendamento
+            bloco_manutencao["updateContractItemDriver"] = False
+            bloco_manutencao["hasPickUpReturnService"] = checklist_alvo.get("leva_e_traz", False)
+        else:
+            bloco_manutencao["requesterName"] = "Equipe Nevada"
+            bloco_manutencao["requesterPhone"] = "11999999999"
+            bloco_manutencao["requesterEmail"] = ""
+            bloco_manutencao["scheduling1"] = data_agendamento
+            
         payload_bluefleet = {
             "contractItemRequestReasonId": checklist_alvo.get("motivo_id"),
             "contractItemRequestReasonClassId": checklist_alvo.get("motivo_classe"),
-            "maintenance": {
-                "currentOdometer": int(checklist_alvo.get("km_atual", 0)),
-                "description": checklist_alvo.get("descricao"),
-                "providerId": 197, # Oficina Nevada
-                "scheduledFor": checklist_alvo.get("data_agendamento"),
-                "scheduling1": checklist_alvo.get("data_agendamento"),
-                "city": "Guarulhos",
-                "state": "SP",
-                "country": "BR",
-                "latitude": -23.4656,
-                "longitude": -46.5330,
-                "requesterName": checklist_alvo.get("solicitante"),
-                "requesterPhone": checklist_alvo.get("telefone"),
-                "requesterEmail": checklist_alvo.get("email")
-            },
+            "maintenance": bloco_manutencao,
             "files": []
         }
         
-        # 3. Dispara para a Blue Fleet
+        # Se for revisão preventiva, amarra o plano de manutenção
+        if is_revisao:
+            payload_bluefleet["hasDefaultMaintenancePlan"] = True
+            payload_bluefleet["maintenancePlanRevisionId"] = checklist_alvo.get("plano_revisao_id", "149")
+        
+        # 3. Dispara a criação para a Blue Fleet
         url_criacao = f"{API_URL}/contract-item/{contract_item_id}/contract-item-request"
         resp_bf = requests.post(url_criacao, headers=headers, json=payload_bluefleet)
         
         if resp_bf.status_code == 200:
-            # Remove o item da geladeira após o sucesso absoluto
             with open(caminho_pendentes, 'w', encoding='utf-8') as f:
                 json.dump(nova_fila, f, ensure_ascii=False, indent=4)
             return jsonify({"isSuccess": True, "mensagem": f"Ocorrência criada com sucesso para a placa {placa}!"}), 200
