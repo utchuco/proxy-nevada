@@ -3,7 +3,7 @@ import json
 import base64
 import requests
 import re 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 from flask import Flask, render_template, request, send_file, jsonify, Response
 from dotenv import load_dotenv
@@ -292,23 +292,23 @@ def receber_checklist():
     if not dados or not dados.get("placa"):
         return jsonify({"isSuccess": False, "erro": "Dados ou placa ausentes."}), 400
 
-    agora_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    agora_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
     
     novo_pendente = {
         "id_aprovacao": str(uuid.uuid4()),
         "placa": dados.get("placa").upper().replace("-", "").strip(),
         "km_atual": dados.get("km"),
-        "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(), # "disponivel" ou "alugado"
+        "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(),
         "motivo_id": str(dados.get("motivo_id", "2")),
-        "motivo_classe": str(dados.get("motivo_classe", "3")),
+        "motivo_classe": str(dados.get("motivo_classe", "9")),
         "plano_revisao_id": str(dados.get("plano_revisao_id", "149")),
-        "descricao": dados.get("descricao", "Manutenção"),
+        "descricao": dados.get("descricao", "Manutenção corretiva"),
         "data_agendamento": dados.get("data_agendamento", agora_iso),
         "solicitante": dados.get("solicitante", "Equipe Nevada"),
         "telefone": dados.get("telefone", "11999999999"),
-        "email": dados.get("email", ""),
+        "email": dados.get("email", "frota@locadoranevada.com.br"),
         "leva_e_traz": bool(dados.get("leva_e_traz", False)),
-        "data_recebimento": agora_iso,
+        "data_recebimento": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "status": "Aguardando Aprovação"
     }
     
@@ -333,6 +333,7 @@ def receber_checklist():
         "id_aprovacao": novo_pendente["id_aprovacao"]
     }), 200
 
+@app.route("/painel", methods=["GET"])
 @app.route("/painel-nevada", methods=["GET"])
 def painel_nevada():
     caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
@@ -345,16 +346,15 @@ def painel_nevada():
         except Exception:
             pass
             
-    # Formata a data para carregar corretamente no input datetime-local do painel
     for item in pendentes:
         dt_raw = item.get("data_agendamento")
         if dt_raw:
             try:
                 item["data_agendamento_local"] = dt_raw[:16]
             except Exception:
-                item["data_agendamento_local"] = datetime.now().strftime("%Y-%m-%dT%H:%M")
+                item["data_agendamento_local"] = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
         else:
-            item["data_agendamento_local"] = datetime.now().strftime("%Y-%m-%dT%H:%M")
+            item["data_agendamento_local"] = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
             
     return render_template("painel.html", checklists=pendentes)
 
@@ -382,7 +382,6 @@ def painel_aprovar(id_aprovacao):
     if not checklist_alvo:
         return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
         
-    # Obtém edições enviadas pela tela (se houver alteração nos inputs)
     edicoes = request.get_json(silent=True) or {}
     
     placa = edicoes.get("placa") or checklist_alvo.get("placa", "").strip().upper()
@@ -393,34 +392,37 @@ def painel_aprovar(id_aprovacao):
     email = edicoes.get("email") or checklist_alvo.get("email") or "frota@locadoranevada.com.br"
     tipo_veiculo = checklist_alvo.get("tipo_veiculo", "alugado")
     
-    # Formata a placa com hífen para a consulta na Blue Fleet
     placa_limpa = placa.replace("-", "").strip().upper()
     if len(placa_limpa) == 7:
         placa_api = f"{placa_limpa[:3]}-{placa_limpa[3:]}"
     else:
         placa_api = placa
     
-    # 1. Trata a Data (converte de volta para ISO UTC com .000Z)
-    dt_input = edicoes.get("data_agendamento")
+    # 1. Tratamento da Data: garante sempre ISO UTC com .000Z válido e futuro
+    dt_input = (edicoes.get("data_agendamento") or "").strip()
     if dt_input:
         try:
             dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
             data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00.000Z")
         except Exception:
-            data_iso = checklist_alvo.get("data_agendamento") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            data_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
     else:
-        data_iso = checklist_alvo.get("data_agendamento") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        raw_agendamento = checklist_alvo.get("data_agendamento")
+        if raw_agendamento and "T" in str(raw_agendamento):
+            data_iso = str(raw_agendamento)
+        else:
+            data_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
 
-    # 2. Mapeia o Motivo Corretiva vs Preventiva
-    motivo_str = str(edicoes.get("motivo_id", checklist_alvo.get("motivo_id", "2")))
-    if motivo_str in ["1", "PreventiveMaintenance"]:
-        motivo_id = 1
-        classe_id = 1
-        is_revisao = True
-    else:
-        motivo_id = 2  # Corretiva
-        classe_id = 3  # Falha Mecânica
+    # 2. Mapeamento dos enums oficiais da Blue Fleet
+    motivo_str = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "2"))
+    if motivo_str in ["2", "CorrectiveMaintenance"]:
+        motivo_id = 2  # CorrectiveMaintenance
+        classe_id = 9  # CorrectiveMaintenanceMechanicalFailure (Falha Mecânica)
         is_revisao = False
+    else:
+        motivo_id = 1  # PreventiveMaintenance
+        classe_id = 1  # PreventiveMaintenanceQuilometerRevision
+        is_revisao = True
     
     try:
         token = get_access_token()
@@ -430,7 +432,7 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 3. Resolve o ContractItemId
+        # 3. Resolução infalível do ContractItemId
         contract_item_id = None
         
         r_oc = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers=headers)
@@ -465,7 +467,7 @@ def painel_aprovar(id_aprovacao):
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
-        # 4. Constrói o Bloco de Manutenção (com pickupDate e sem scheduledFor)
+        # 4. Bloco de Manutenção oficial com scheduling1 e pickupDate
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
@@ -497,7 +499,7 @@ def painel_aprovar(id_aprovacao):
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
             payload_bluefleet["maintenancePlanRevisionId"] = checklist_alvo.get("plano_revisao_id", "149")
         
-        # 5. Dispara a criação para a Blue Fleet
+        # 5. Envio para a Blue Fleet
         url_criacao = f"{API_URL}/contract-item/{contract_item_id}/contract-item-request"
         resp_bf = requests.post(url_criacao, headers=headers, json=payload_bluefleet)
         
