@@ -358,6 +358,7 @@ def painel_nevada():
             
     return render_template("painel.html", checklists=pendentes)
 
+@app.route("/painel/aprovar/<id_aprovacao>", methods=["POST"])
 @app.route("/painel-nevada/aprovar/<id_aprovacao>", methods=["POST"])
 def painel_aprovar(id_aprovacao):
     caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
@@ -518,6 +519,8 @@ def painel_aprovar(id_aprovacao):
     except Exception as e:
         return jsonify({"isSuccess": False, "erro": f"Erro interno ao disparar: {str(e)}"}), 500
 
+@app.route("/painel/descartar/<id_aprovacao>", methods=["POST"])
+@app.route("/painel/rejeitar/<id_aprovacao>", methods=["POST"])
 @app.route("/painel-nevada/rejeitar/<id_aprovacao>", methods=["POST"])
 def painel_rejeitar(id_aprovacao):
     caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
