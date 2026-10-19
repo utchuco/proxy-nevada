@@ -47,7 +47,7 @@
     {% else %}
       <div class="grid">
         {% for c in checklists %}
-        <div class="card" id="card-{{ c.id }}">
+        <div class="card" id="card-{{ c.id_aprovacao }}">
           <div class="card-header">
             <span class="placa-badge">{{ c.placa }}</span>
             <span class="tipo-badge {% if c.tipo_veiculo == 'alugado' %}alugado{% else %}patio{% endif %}">
@@ -55,7 +55,7 @@
             </span>
           </div>
 
-          <form id="form-{{ c.id }}">
+          <form id="form-{{ c.id_aprovacao }}">
             <div class="form-grid">
               <div class="form-group">
                 <label>Placa</label>
@@ -102,8 +102,8 @@
             </div>
 
             <div class="actions">
-              <button type="button" class="btn-reject" onclick="descartar('{{ c.id }}')">Descartar</button>
-              <button type="button" class="btn-approve" onclick="aprovar('{{ c.id }}')">Salvar e Enviar Blue Fleet</button>
+              <button type="button" class="btn-reject" onclick="descartar('{{ c.id_aprovacao }}')">Descartar</button>
+              <button type="button" class="btn-approve" onclick="aprovar('{{ c.id_aprovacao }}')">Salvar e Enviar Blue Fleet</button>
             </div>
           </form>
         </div>
@@ -117,11 +117,11 @@
       if (!confirm("Deseja realmente descartar este checklist?")) return;
       const r = await fetch(`/painel/descartar/${id}`, { method: "POST" });
       const res = await r.json();
-      if (res.sucesso) {
+      if (res.isSuccess || res.sucesso) {
         document.getElementById(`card-${id}`).remove();
         location.reload();
       } else {
-        alert("Erro: " + res.erro);
+        alert("Erro: " + (res.erro || res.mensagem));
       }
     }
 
@@ -140,7 +140,7 @@
           body: JSON.stringify(data)
         });
         const res = await r.json();
-        if (res.sucesso) {
+        if (res.isSuccess) {
           alert(`Sucesso! Ocorrência criada na Blue Fleet: ID ${res.contractItemRequestId}`);
           document.getElementById(`card-${id}`).remove();
           location.reload();
