@@ -440,18 +440,17 @@ def painel_aprovar(id_aprovacao):
             "longitude": -46.5330
         }
         
+        email_padrao = checklist_alvo.get("email") or "frota@locadoranevada.com.br"
+
+        bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante") or "Equipe Nevada"
+        bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone") or "11999999999"
+        bloco_manutencao["requesterEmail"] = email_padrao
+        bloco_manutencao["scheduling1"] = data_agendamento
+        bloco_manutencao["scheduleDate1"] = data_agendamento
+
         if tipo_veiculo == "alugado":
-            bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante", "Equipe Nevada")
-            bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone", "11999999999")
-            bloco_manutencao["requesterEmail"] = checklist_alvo.get("email", "")
-            bloco_manutencao["scheduleDate1"] = data_agendamento
             bloco_manutencao["updateContractItemDriver"] = False
             bloco_manutencao["hasPickUpReturnService"] = checklist_alvo.get("leva_e_traz", False)
-        else:
-            bloco_manutencao["requesterName"] = "Equipe Nevada"
-            bloco_manutencao["requesterPhone"] = "11999999999"
-            bloco_manutencao["requesterEmail"] = ""
-            bloco_manutencao["scheduling1"] = data_agendamento
             
         payload_bluefleet = {
             "contractItemRequestReasonId": checklist_alvo.get("motivo_id"),
