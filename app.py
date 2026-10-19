@@ -426,27 +426,31 @@ def painel_aprovar(id_aprovacao):
         
         # 2. Constrói o Payload dinamicamente com base no tipo de manutenção e veículo
         is_revisao = str(checklist_alvo.get("motivo_id")) in ["1", "PreventiveMaintenance"]
-        data_agendamento = checklist_alvo.get("data_agendamento")
+        # Garante data em tempo real (evita erro de data retroativa na Blue Fleet)
+        agora_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        data_agendamento = checklist_alvo.get("data_agendamento") or agora_utc
         
+        if data_agendamento < agora_utc[:10]:
+            data_agendamento = agora_utc
+
+        email_padrao = checklist_alvo.get("email") or "frota@locadoranevada.com.br"
+
         bloco_manutencao = {
             "currentOdometer": int(checklist_alvo.get("km_atual", 0)),
             "description": checklist_alvo.get("descricao", "Manutenção"),
-            "providerId": 197, # Oficina Nevada
+            "providerId": 197,
             "scheduledFor": data_agendamento,
+            "scheduling1": data_agendamento,
+            "scheduleDate1": data_agendamento,
             "city": "Guarulhos",
             "state": "SP",
             "country": "BR",
             "latitude": -23.4656,
-            "longitude": -46.5330
+            "longitude": -46.5330,
+            "requesterName": checklist_alvo.get("solicitante") or "Equipe Nevada",
+            "requesterPhone": checklist_alvo.get("telefone") or "11999999999",
+            "requesterEmail": email_padrao
         }
-        
-        email_padrao = checklist_alvo.get("email") or "frota@locadoranevada.com.br"
-
-        bloco_manutencao["requesterName"] = checklist_alvo.get("solicitante") or "Equipe Nevada"
-        bloco_manutencao["requesterPhone"] = checklist_alvo.get("telefone") or "11999999999"
-        bloco_manutencao["requesterEmail"] = email_padrao
-        bloco_manutencao["scheduling1"] = data_agendamento
-        bloco_manutencao["scheduleDate1"] = data_agendamento
 
         if tipo_veiculo == "alugado":
             bloco_manutencao["updateContractItemDriver"] = False
