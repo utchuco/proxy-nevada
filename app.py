@@ -387,15 +387,26 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 1. Resolve o ContractItemId do carro na Blue Fleet usando a placa formatada
-        r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
-        r_veiculo.raise_for_status()
-        veiculos = r_veiculo.json().get("data", [])
+        # 1. Resolve o ContractItemId do carro na Blue Fleet de forma blindada
+        contract_item_id = None
         
-        if not veiculos or not veiculos[0].get("contractItemId"):
-            return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não encontrado ou sem contrato ativo na API."}), 400
-            
-        contract_item_id = veiculos[0].get("contractItemId")
+        # Tentativa A: direto no endpoint de itens de contrato
+        r_ci = requests.get(f"{API_URL}/contract-item?LicensePlate={placa_api}", headers=headers)
+        if r_ci.status_code == 200:
+            itens = r_ci.json().get("data", [])
+            if itens:
+                contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+        
+        # Tentativa B: fallback no endpoint de veículos caso a A não retorne
+        if not contract_item_id:
+            r_veiculo = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
+            if r_veiculo.status_code == 200:
+                veiculos = r_veiculo.json().get("data", [])
+                if veiculos:
+                    contract_item_id = veiculos[0].get("contractItemId")
+                    
+        if not contract_item_id:
+            return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
         # 2. Constrói o Payload dinamicamente com base no tipo de manutenção e veículo
         is_revisao = str(checklist_alvo.get("motivo_id")) in ["1", "PreventiveMaintenance"]
