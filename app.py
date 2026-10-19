@@ -398,25 +398,27 @@ def painel_aprovar(id_aprovacao):
     else:
         placa_api = placa
     
-    # 1. Tratamento da Data: Garante SEMPRE data válida em formato ISO UTC com .000Z
-    amanha_utc = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
+    # 1. Tratamento da Data: O formato EXATO que ja aprovamos antes (SEM Z e sem milissegundos)
+    amanha = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
     
     dt_input = (edicoes.get("data_agendamento") or "").strip()
     if dt_input:
         try:
             dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
-            data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00.000Z")
+            data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00")
         except Exception:
-            data_iso = amanha_utc
+            data_iso = amanha
     else:
         raw_agendamento = checklist_alvo.get("data_agendamento")
         if raw_agendamento and "T" in str(raw_agendamento):
-            data_iso = str(raw_agendamento)
+            data_iso = str(raw_agendamento).replace(".000Z", "").replace("Z", "")
+            if len(data_iso) > 19:
+                data_iso = data_iso[:19] # Corta nos segundos exatos
         else:
-            data_iso = amanha_utc
+            data_iso = amanha
 
     if not data_iso or len(str(data_iso).strip()) < 10:
-        data_iso = amanha_utc
+        data_iso = amanha
 
     # 2. Mapeamento de motivos e classes oficiais do Swagger Blue Fleet
     motivo_str = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "2"))
@@ -472,7 +474,7 @@ def painel_aprovar(id_aprovacao):
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
         
-        # 4. Bloco de Manutenção garantindo a leitura do agendamento
+        # 4. Bloco de Manutenção limpo com a chave oficial
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
@@ -486,19 +488,7 @@ def painel_aprovar(id_aprovacao):
             "requesterPhone": telefone,
             "requesterEmail": email,
             "pickupDate": data_iso,
-            
-            # --- TÁTICA DA METRALHADORA (Uma dessas é a chave certa) ---
-            "scheduling1": data_iso,
-            "Scheduling1": data_iso,
-            "schedulingDate1": data_iso,
-            "SchedulingDate1": data_iso,
-            "schedule1": data_iso,
-            "Schedule1": data_iso,
-            "scheduling": data_iso,
-            "date1": data_iso,
-            "appointment1": data_iso,
-            "scheduling_1": data_iso,
-            "maintenanceScheduling1": data_iso
+            "scheduling1": data_iso
         }
 
         if tipo_veiculo == "alugado":
