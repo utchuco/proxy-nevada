@@ -1,160 +1,148 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Painel de Aprovação - Nevada Frota</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
-    .container { max-width: 1000px; margin: 0 auto; }
-    h1 { font-size: 24px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
-    .badge { background: #3b82f6; font-size: 14px; padding: 4px 10px; border-radius: 9999px; }
-    .grid { display: grid; gap: 20px; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
-    .card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 16px; }
-    .placa-badge { background: #f59e0b; color: #000; font-weight: bold; font-size: 18px; padding: 4px 12px; border-radius: 6px; }
-    .tipo-badge { font-size: 12px; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; font-weight: bold; }
-    .alugado { background: #6366f1; color: #fff; }
-    .patio { background: #10b981; color: #fff; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
-    .form-group { display: flex; flex-direction: column; }
-    .form-group.full { grid-column: 1 / -1; }
-    label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-weight: 500; }
-    input, select, textarea { background: #0f172a; border: 1px solid #475569; color: #f8fafc; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
-    input:focus, select:focus, textarea:focus { border-color: #38bdf8; outline: none; }
-    textarea { resize: vertical; min-height: 60px; }
-    .actions { display: flex; gap: 10px; justify-content: flex-end; }
-    button { padding: 10px 18px; border-radius: 6px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-    .btn-approve { background: #10b981; color: #fff; }
-    .btn-approve:hover { background: #059669; }
-    .btn-reject { background: #ef4444; color: #fff; }
-    .btn-reject:hover { background: #dc2626; }
-    .empty { text-align: center; color: #64748b; padding: 50px 0; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Aprovação - Nevada</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .card-checklist { transition: transform 0.2s; }
+        .card-checklist:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>
-      Pendências de Manutenção
-      <span class="badge">{{ checklists|length }} pendentes</span>
-    </h1>
-
-    {% if not checklists %}
-      <div class="card empty">
-        <h2>Tudo em dia!</h2>
-        <p>Nenhum checklist aguardando aprovação no momento.</p>
-      </div>
-    {% else %}
-      <div class="grid">
-        {% for c in checklists %}
-        <div class="card" id="card-{{ c.id_aprovacao }}">
-          <div class="card-header">
-            <span class="placa-badge">{{ c.placa }}</span>
-            <span class="tipo-badge {% if c.tipo_veiculo == 'alugado' %}alugado{% else %}patio{% endif %}">
-              {{ c.tipo_veiculo }}
-            </span>
-          </div>
-
-          <form id="form-{{ c.id_aprovacao }}">
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Placa</label>
-                <input type="text" name="placa" value="{{ c.placa }}">
-              </div>
-
-              <div class="form-group">
-                <label>KM Atual</label>
-                <input type="number" name="km_atual" value="{{ c.km_atual }}">
-              </div>
-
-              <div class="form-group">
-                <label>Tipo de Ocorrência</label>
-                <select name="motivo_id">
-                  <option value="2" {% if c.motivo_id|string == "2" or c.motivo_id|string != "1" %}selected{% endif %}>Corretiva (Falha Mecânica)</option>
-                  <option value="1" {% if c.motivo_id|string == "1" %}selected{% endif %}>Preventiva (Revisão Periódica/KM)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Data/Hora Chegada e Agendamento</label>
-                <input type="datetime-local" name="data_agendamento" value="{{ c.data_agendamento_local }}">
-              </div>
-
-              <div class="form-group">
-                <label>Solicitante</label>
-                <input type="text" name="solicitante" value="{{ c.solicitante or 'Equipe Nevada' }}">
-              </div>
-
-              <div class="form-group">
-                <label>Telefone</label>
-                <input type="text" name="telefone" value="{{ c.telefone or '11999999999' }}">
-              </div>
-
-              <div class="form-group">
-                <label>E-mail</label>
-                <input type="email" name="email" value="{{ c.email or 'frota@locadoranevada.com.br' }}">
-              </div>
-
-              <div class="form-group full">
-                <label>Descrição do Problema / Serviço</label>
-                <textarea name="descricao">{{ c.descricao }}</textarea>
-              </div>
-            </div>
-
-            <div class="actions">
-              <button type="button" class="btn-reject" onclick="descartar('{{ c.id_aprovacao }}')">Descartar</button>
-              <button type="button" class="btn-approve" onclick="aprovar('{{ c.id_aprovacao }}')">Salvar e Enviar Blue Fleet</button>
-            </div>
-          </form>
+    <nav class="navbar navbar-dark bg-dark mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">Gestão de Checklists Pendentes - Nevada</span>
         </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  </div>
+    </nav>
 
-  <script>
-    async function descartar(id) {
-      if (!confirm("Deseja realmente descartar este checklist?")) return;
-      const r = await fetch(`/painel/descartar/${id}`, { method: "POST" });
-      const res = await r.json();
-      if (res.isSuccess || res.sucesso) {
-        document.getElementById(`card-${id}`).remove();
-        location.reload();
-      } else {
-        alert("Erro: " + (res.erro || res.mensagem));
-      }
-    }
+    <div class="container">
+        {% if not checklists %}
+            <div class="alert alert-info text-center" role="alert">
+                Nenhum checklist aguardando aprovação no momento.
+            </div>
+        {% else %}
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+                {% for item in checklists %}
+                <div class="col" id="card_{{ item.id_aprovacao }}">
+                    <div class="card card-checklist h-100 border-primary">
+                        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Placa: {{ item.placa }}</h5>
+                            <span class="badge bg-light text-dark">{{ item.tipo_veiculo | title }}</span>
+                        </div>
+                        <div class="card-body">
+                            <!-- Formulário de Edição antes de aprovar -->
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">KM Atual:</label>
+                                <input type="number" class="form-control" id="km_{{ item.id_aprovacao }}" value="{{ item.km_atual }}">
+                            </div>
 
-    async function aprovar(id) {
-      const form = document.getElementById(`form-${id}`);
-      const data = Object.fromEntries(new FormData(form).entries());
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Descrição / Defeito:</label>
+                                <textarea class="form-control" id="desc_{{ item.id_aprovacao }}" rows="2">{{ item.descricao }}</textarea>
+                            </div>
 
-      const btn = form.querySelector(".btn-approve");
-      btn.disabled = true;
-      btn.innerText = "Enviando...";
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Data de Agendamento:</label>
+                                <input type="datetime-local" class="form-control" id="data_{{ item.id_aprovacao }}" value="{{ item.data_agendamento_local }}">
+                            </div>
 
-      try {
-        const r = await fetch(`/painel/aprovar/${id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        });
-        const res = await r.json();
-        if (res.isSuccess) {
-          alert(`Sucesso! Ocorrência criada na Blue Fleet: ID ${res.contractItemRequestId}`);
-          document.getElementById(`card-${id}`).remove();
-          location.reload();
-        } else {
-          alert("Blue Fleet recusou: " + JSON.stringify(res.detalhes || res.erro));
-          btn.disabled = false;
-          btn.innerText = "Salvar e Enviar Blue Fleet";
+                            <!-- NOVO SELECT COM AS CLASSES DO SWAGGER -->
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Tipo e Classe de Manutenção:</label>
+                                <select class="form-select" id="tipo_manutencao_{{ item.id_aprovacao }}">
+                                    <optgroup label="Corretivas (Falhas)">
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceMechanicalFailure" {% if item.motivo_id == '2' or item.motivo_id == 'CorrectiveMaintenance' %}selected{% endif %}>Falha Mecânica Geral</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceEngine">Motor</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceElectric">Parte Elétrica</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceAirConditioning">Ar Condicionado</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceBodyShop">Funilaria / Lataria</option>
+                                    </optgroup>
+                                    <optgroup label="Preventivas (Revisões)">
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceQuilometerRevision" {% if item.motivo_id == '1' or item.motivo_id == 'PreventiveMaintenance' %}selected{% endif %}>Revisão por Quilometragem</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTimeRevision">Revisão por Tempo</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceOilExchange">Troca de Óleo</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTires">Troca de Pneus</option>
+                                    </optgroup>
+                                    <optgroup label="Sinistros (Opcional)">
+                                        <option value="Claim|ClaimAccidentCollision">Acidente / Colisão</option>
+                                        <option value="Claim|ClaimTheftOrRobberyVehicle">Roubo / Furto de Veículo</option>
+                                        <option value="Claim|ClaimGlasses">Quebra de Vidros</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            
+                            <hr>
+                            <p class="card-text mb-1"><small><strong>Solicitante:</strong> <span id="solic_{{ item.id_aprovacao }}">{{ item.solicitante }}</span></small></p>
+                            <p class="card-text mb-1"><small><strong>Telefone:</strong> <span id="tel_{{ item.id_aprovacao }}">{{ item.telefone }}</span></small></p>
+                            <p class="card-text mb-3"><small><strong>Leva e Traz:</strong> {{ 'Sim' if item.leva_e_traz else 'Não' }}</small></p>
+                        </div>
+                        <div class="card-footer bg-white d-flex justify-content-between">
+                            <button class="btn btn-danger btn-sm" onclick="rejeitarChecklist('{{ item.id_aprovacao }}')">Descartar</button>
+                            <button class="btn btn-success btn-sm" onclick="aprovarChecklist('{{ item.id_aprovacao }}')">Aprovar e Enviar</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        async function aprovarChecklist(id) {
+            if(!confirm("Confirmar envio para a Blue Fleet?")) return;
+
+            // Extrai as Strings oficiais do Swagger separando pelo caractere "|"
+            let escolhas = document.getElementById('tipo_manutencao_' + id).value.split('|');
+
+            let payload = {
+                placa: document.querySelector('#card_' + id + ' h5').innerText.replace('Placa: ', '').trim(),
+                km_atual: document.getElementById('km_' + id).value,
+                descricao: document.getElementById('desc_' + id).value,
+                data_agendamento: document.getElementById('data_' + id).value,
+                motivo_id: escolhas[0],       // Ex: CorrectiveMaintenance
+                motivo_classe: escolhas[1],   // Ex: CorrectiveMaintenanceMechanicalFailure
+                solicitante: document.getElementById('solic_' + id).innerText,
+                telefone: document.getElementById('tel_' + id).innerText
+            };
+
+            try {
+                let response = await fetch('/painel/aprovar/' + id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                let data = await response.json();
+                
+                if (data.isSuccess) {
+                    alert("Sucesso! ID da Ocorrência: " + data.contractItemRequestId);
+                    document.getElementById('card_' + id).remove();
+                } else {
+                    alert("Erro da Blue Fleet: " + data.erro);
+                }
+            } catch (error) {
+                alert("Erro ao conectar com o servidor local.");
+            }
         }
-      } catch (err) {
-        alert("Erro de comunicação com o servidor: " + err);
-        btn.disabled = false;
-        btn.innerText = "Salvar e Enviar Blue Fleet";
-      }
-    }
-  </script>
+
+        async function rejeitarChecklist(id) {
+            if(!confirm("Tem certeza que deseja descartar este checklist?")) return;
+
+            try {
+                let response = await fetch('/painel/rejeitar/' + id, { method: 'POST' });
+                let data = await response.json();
+                if (data.isSuccess) {
+                    document.getElementById('card_' + id).remove();
+                } else {
+                    alert("Erro ao descartar: " + data.erro);
+                }
+            } catch (error) {
+                alert("Erro ao conectar com o servidor.");
+            }
+        }
+    </script>
 </body>
 </html>

@@ -420,16 +420,23 @@ def painel_aprovar(id_aprovacao):
     if not data_iso or len(str(data_iso).strip()) < 10:
         data_iso = amanha
 
-    # 2. Mapeamento de motivos e classes oficiais do Swagger Blue Fleet
-    motivo_str = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "2"))
-    if motivo_str in ["2", "CorrectiveMaintenance"]:
-        motivo_id = 2  # CorrectiveMaintenance
-        classe_id = 9  # CorrectiveMaintenanceMechanicalFailure (Falha Mecânica)
-        is_revisao = False
+    # 2. Mapeamento Exato do Swagger (Textos oficiais em vez de números)
+    motivo_raw = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "CorrectiveMaintenance"))
+    classe_raw = str(edicoes.get("motivo_classe") or checklist_alvo.get("motivo_classe", "CorrectiveMaintenanceMechanicalFailure"))
+
+    # Trava de segurança: Se o site do seu colega ainda enviar "1" ou "2", o Python traduz sozinho
+    if motivo_raw == "2":
+        motivo_id = "CorrectiveMaintenance"
+        classe_id = "CorrectiveMaintenanceMechanicalFailure" if classe_raw == "9" else classe_raw
+    elif motivo_raw == "1":
+        motivo_id = "PreventiveMaintenance"
+        classe_id = "PreventiveMaintenanceQuilometerRevision" if classe_raw == "1" else classe_raw
     else:
-        motivo_id = 1  # PreventiveMaintenance
-        classe_id = 1  # PreventiveMaintenanceQuilometerRevision
-        is_revisao = True
+        motivo_id = motivo_raw
+        classe_id = classe_raw
+
+    # Define se é revisão para enviar os campos extras de quilometragem
+    is_revisao = True if motivo_id == "PreventiveMaintenance" else False
     
     try:
         token = get_access_token()
