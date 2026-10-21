@@ -592,7 +592,7 @@ def painel_aprovar(id_aprovacao):
         # Adiciona variáveis extras NA RAIZ do JSON (e nunca dentro da manutenção)
         if tipo_veiculo == "alugado":
             payload_bluefleet["updateContractItemDriver"] = False
-            payload_bluefleet["hasPickUpReturnService"] = checklist_alvo.get("leva_e_traz", False)
+            payload_bluefleet["hasPickUpReturnService"] = edicoes.get("leva_e_traz", checklist_alvo.get("leva_e_traz", False))
             
         if is_revisao:
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
