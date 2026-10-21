@@ -197,7 +197,7 @@ def buscar():
 @app.route("/checklist/<placa>")
 def buscar_checklist(placa):
     placa = placa.strip().upper()
-    placa_limpa = placa.replace("-", "") 
+    placa_limpa = placa.replace("-", "")
     
     if len(placa) == 7 and "-" not in placa:
         placa = f"{placa[:3]}-{placa[3:]}"
@@ -289,25 +289,68 @@ def acessar_crlv():
 def receber_checklist():
     dados = request.get_json()
     
-    if not dados or not dados.get("placa"):
+    if not dados or not (dados.get("placa") or dados.get("placa_veiculo")):
         return jsonify({"isSuccess": False, "erro": "Dados ou placa ausentes."}), 400
 
-    agora_iso = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00.000Z")
+    placa_bruta = str(dados.get("placa") or dados.get("placa_veiculo")).upper().strip()
+    placa_limpa = placa_bruta.replace("-", "").replace(" ", "")
     
+    # Define data futura sugerida padrão (amanhã às 10:00) se não for informada
+    amanha_iso = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
+    data_agendamento = dados.get("data_agendamento") or dados.get("data_sugerida") or amanha_iso
+
+    # Tratamento do tipo de ocorrência
+    tipo_input = str(dados.get("tipo_manutencao") or "").lower()
+    motivo_id = dados.get("motivo_id")
+    motivo_classe = dados.get("motivo_classe")
+    
+    if not motivo_id:
+        if "prev" in tipo_input or "revis" in tipo_input:
+            motivo_id = "PreventiveMaintenance"
+            motivo_classe = motivo_classe or "PreventiveMaintenanceQuilometerRevision"
+        else:
+            motivo_id = "CorrectiveMaintenance"
+            motivo_classe = motivo_classe or "CorrectiveMaintenanceMechanicalFailure"
+
+    id_aprovacao = str(uuid.uuid4())
+    
+    # Processamento do PDF do Checklist (Base64)
+    caminho_pdf_salvo = None
+    pdf_base64 = dados.get("pdf_base64")
+    pdf_nome = dados.get("pdf_nome") or f"Checklist_{placa_limpa}.pdf"
+    
+    if pdf_base64:
+        try:
+            pasta_checklists = os.path.join(os.path.dirname(__file__), 'documentos', 'checklists_recebidos')
+            os.makedirs(pasta_checklists, exist_ok=True)
+            nome_arquivo_seguro = f"Checklist_{placa_limpa}_{id_aprovacao[:8]}.pdf"
+            caminho_completo_pdf = os.path.join(pasta_checklists, nome_arquivo_seguro)
+            
+            if "," in pdf_base64:
+                pdf_base64 = pdf_base64.split(",")[1]
+                
+            with open(caminho_completo_pdf, "wb") as f_pdf:
+                f_pdf.write(base64.b64decode(pdf_base64))
+            caminho_pdf_salvo = caminho_completo_pdf
+        except Exception as e_pdf:
+            print(f"Aviso: Erro ao salvar PDF do checklist: {e_pdf}")
+
     novo_pendente = {
-        "id_aprovacao": str(uuid.uuid4()),
-        "placa": dados.get("placa").upper().replace("-", "").strip(),
-        "km_atual": dados.get("km"),
+        "id_aprovacao": id_aprovacao,
+        "placa": placa_limpa,
+        "km_atual": dados.get("km_atual") or dados.get("km") or 0,
         "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(),
-        "motivo_id": str(dados.get("motivo_id", "2")),
-        "motivo_classe": str(dados.get("motivo_classe", "9")),
+        "motivo_id": str(motivo_id),
+        "motivo_classe": str(motivo_classe),
         "plano_revisao_id": str(dados.get("plano_revisao_id", "149")),
-        "descricao": dados.get("descricao", "Manutenção corretiva"),
-        "data_agendamento": dados.get("data_agendamento", agora_iso),
-        "solicitante": dados.get("solicitante", "Equipe Nevada"),
-        "telefone": dados.get("telefone", "11999999999"),
-        "email": dados.get("email", "frota@locadoranevada.com.br"),
+        "descricao": dados.get("descricao") or dados.get("defeito_relatado") or "Manutenção",
+        "data_agendamento": data_agendamento,
+        "solicitante": dados.get("solicitante") or dados.get("motorista_nome") or "Equipe Nevada",
+        "telefone": dados.get("telefone") or dados.get("motorista_telefone") or "11999999999",
+        "email": dados.get("email") or dados.get("motorista_email") or "frota@locadoranevada.com.br",
         "leva_e_traz": bool(dados.get("leva_e_traz", False)),
+        "caminho_pdf": caminho_pdf_salvo,
+        "pdf_nome": pdf_nome,
         "data_recebimento": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "status": "Aguardando Aprovação"
     }
@@ -332,6 +375,22 @@ def receber_checklist():
         "mensagem": "Checklist completo recebido e guardado para aprovação!",
         "id_aprovacao": novo_pendente["id_aprovacao"]
     }), 200
+
+@app.route("/painel/checklist-pdf/<id_aprovacao>", methods=["GET"])
+def ver_pdf_checklist(id_aprovacao):
+    caminho_pendentes = os.path.join(os.path.dirname(__file__), 'checklists_pendentes.json')
+    if os.path.exists(caminho_pendentes):
+        try:
+            with open(caminho_pendentes, 'r', encoding='utf-8') as f:
+                pendentes = json.load(f)
+            for item in pendentes:
+                if item.get("id_aprovacao") == id_aprovacao and item.get("caminho_pdf"):
+                    caminho_pdf = item.get("caminho_pdf")
+                    if os.path.exists(caminho_pdf):
+                        return send_file(caminho_pdf, mimetype='application/pdf')
+        except Exception as e:
+            return f"Erro ao abrir arquivo PDF: {str(e)}", 500
+    return "Checklist ou PDF não encontrado.", 404
 
 @app.route("/painel", methods=["GET"])
 @app.route("/painel-nevada", methods=["GET"])
@@ -398,13 +457,16 @@ def painel_aprovar(id_aprovacao):
     else:
         placa_api = placa
     
-    # 1. Tratamento da Data: O formato EXATO que ja aprovamos antes (SEM Z e sem milissegundos)
+    # 1. Tratamento da Data: O formato EXATO oficial da Blue Fleet (SEM Z e sem milissegundos)
     amanha = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
     
     dt_input = (edicoes.get("data_agendamento") or "").strip()
     if dt_input:
         try:
             dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
+            # Garante que seja sempre data futura
+            if dt_obj <= datetime.now():
+                dt_obj = datetime.now() + timedelta(days=1)
             data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00")
         except Exception:
             data_iso = amanha
@@ -414,6 +476,12 @@ def painel_aprovar(id_aprovacao):
             data_iso = str(raw_agendamento).replace(".000Z", "").replace("Z", "")
             if len(data_iso) > 19:
                 data_iso = data_iso[:19] # Corta nos segundos exatos
+            try:
+                dt_teste = datetime.strptime(data_iso, "%Y-%m-%dT%H:%M:%S")
+                if dt_teste <= datetime.now():
+                    data_iso = amanha
+            except Exception:
+                data_iso = amanha
         else:
             data_iso = amanha
 
@@ -424,13 +492,13 @@ def painel_aprovar(id_aprovacao):
     motivo_raw = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "CorrectiveMaintenance"))
     classe_raw = str(edicoes.get("motivo_classe") or checklist_alvo.get("motivo_classe", "CorrectiveMaintenanceMechanicalFailure"))
 
-    # Trava de segurança: Se o site do seu colega ainda enviar "1" ou "2", o Python traduz sozinho
+    # Trava de compatibilidade: Se vier número ("1" ou "2"), o backend traduz para o enum oficial
     if motivo_raw == "2":
         motivo_id = "CorrectiveMaintenance"
-        classe_id = "CorrectiveMaintenanceMechanicalFailure" if classe_raw == "9" else classe_raw
+        classe_id = "CorrectiveMaintenanceMechanicalFailure" if classe_raw in ["9", "2", ""] else classe_raw
     elif motivo_raw == "1":
         motivo_id = "PreventiveMaintenance"
-        classe_id = "PreventiveMaintenanceQuilometerRevision" if classe_raw == "1" else classe_raw
+        classe_id = "PreventiveMaintenanceQuilometerRevision" if classe_raw in ["1", ""] else classe_raw
     else:
         motivo_id = motivo_raw
         classe_id = classe_raw
@@ -486,11 +554,11 @@ def painel_aprovar(id_aprovacao):
             "currentOdometer": km_atual,
             "description": descricao,
             "providerId": 197,
-            "city": "Guarulhos",
+            "city": "São Paulo",
             "state": "SP",
             "country": "BR",
-            "latitude": -23.4656,
-            "longitude": -46.5330,
+            "latitude": -23.5557714,
+            "longitude": -46.6395571,
             "requesterName": solicitante,
             "requesterPhone": telefone,
             "requesterEmail": email,
@@ -498,12 +566,27 @@ def painel_aprovar(id_aprovacao):
             "scheduling1": data_iso
         }
 
+        # Anexa PDF do checklist se existir fisicamente no servidor
+        files_payload = []
+        caminho_pdf = checklist_alvo.get("caminho_pdf")
+        if caminho_pdf and os.path.exists(caminho_pdf):
+            try:
+                with open(caminho_pdf, "rb") as f_pdf:
+                    b64_pdf = base64.b64encode(f_pdf.read()).decode()
+                files_payload.append({
+                    "fileName": checklist_alvo.get("pdf_nome") or f"Checklist_{placa_api}.pdf",
+                    "base64Contents": b64_pdf,
+                    "fileType": "UnidentifiedDocument"
+                })
+            except Exception as e_pdf:
+                print(f"Aviso: não foi possível codificar PDF do checklist: {e_pdf}")
+
         # Monta a raiz do Payload primeiro
         payload_bluefleet = {
             "contractItemRequestReasonId": motivo_id,
             "contractItemRequestReasonClassId": classe_id,
             "maintenance": bloco_manutencao,
-            "files": []
+            "files": files_payload
         }
 
         # Adiciona variáveis extras NA RAIZ do JSON (e nunca dentro da manutenção)
@@ -513,9 +596,9 @@ def painel_aprovar(id_aprovacao):
             
         if is_revisao:
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
-            payload_bluefleet["maintenancePlanRevisionId"] = checklist_alvo.get("plano_revisao_id", "149")
+            payload_bluefleet["maintenancePlanRevisionId"] = "149"
         
-        # 5. Envio para a Blue Fleet
+        # 5. Envio da Ocorrência para a Blue Fleet
         url_criacao = f"{API_URL}/contract-item/{contract_item_id}/contract-item-request"
         resp_bf = requests.post(url_criacao, headers=headers, json=payload_bluefleet)
         
@@ -523,6 +606,14 @@ def painel_aprovar(id_aprovacao):
             resp_dados = resp_bf.json()
             req_id = resp_dados.get("data", {}).get("contractItemRequestId")
             
+            # 6. Avanço Automático para a fila certa (Check-in do Veículo)
+            try:
+                url_checkin = f"{API_URL}/contract-item-request/{req_id}/waiting-checkin"
+                r_chk = requests.post(url_checkin, headers=headers, json={"confirmVehicleCheckinDate": data_iso}, timeout=5)
+                print(f"Avanço de fila para check-in (Status {r_chk.status_code}): {r_chk.text}")
+            except Exception as e_chk:
+                print(f"Aviso: falha ao avançar ocorrência {req_id} para check-in: {e_chk}")
+
             with open(caminho_pendentes, 'w', encoding='utf-8') as f:
                 json.dump(nova_fila, f, ensure_ascii=False, indent=4)
                 
@@ -583,4 +674,6 @@ def api_sugestoes():
         return jsonify({"placas": []})
 
 if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
     app.run(host="0.0.0.0", port=5000)

@@ -49,27 +49,42 @@
                                 <input type="datetime-local" class="form-control" id="data_{{ item.id_aprovacao }}" value="{{ item.data_agendamento_local }}">
                             </div>
 
-                            <!-- NOVO SELECT COM AS CLASSES DO SWAGGER -->
+                            <!-- SELECT COMPLETO COM TODAS AS CLASSES OFICIAIS DO SWAGGER -->
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Tipo e Classe de Manutenção:</label>
                                 <select class="form-select" id="tipo_manutencao_{{ item.id_aprovacao }}">
-                                    <optgroup label="Corretivas (Falhas)">
-                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceMechanicalFailure" {% if item.motivo_id == '2' or item.motivo_id == 'CorrectiveMaintenance' %}selected{% endif %}>Falha Mecânica Geral</option>
-                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceEngine">Motor</option>
-                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceElectric">Parte Elétrica</option>
-                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceAirConditioning">Ar Condicionado</option>
-                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceBodyShop">Funilaria / Lataria</option>
+                                    <optgroup label="🟡 Corretivas (Defeitos / Reparos)">
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceMechanicalFailure" {% if item.motivo_classe == 'CorrectiveMaintenanceMechanicalFailure' or item.motivo_id == '2' or item.motivo_id == 'CorrectiveMaintenance' %}selected{% endif %}>⚙️ Falha Mecânica Geral</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceEngine" {% if item.motivo_classe == 'CorrectiveMaintenanceEngine' %}selected{% endif %}>🏎️ Motor (Falha / Aquecimento)</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceElectric" {% if item.motivo_classe == 'CorrectiveMaintenanceElectric' %}selected{% endif %}>⚡ Parte Elétrica / Iluminação</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceSuspension" {% if item.motivo_classe == 'CorrectiveMaintenanceSuspension' %}selected{% endif %}>🔩 Suspensão e Amortecedores</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceBrakes" {% if item.motivo_classe == 'CorrectiveMaintenanceBrakes' %}selected{% endif %}>🛑 Freios (Falha / Barulho)</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceTransmission" {% if item.motivo_classe == 'CorrectiveMaintenanceTransmission' %}selected{% endif %}>🕹️ Câmbio / Embreagem</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceBatteries" {% if item.motivo_classe == 'CorrectiveMaintenanceBatteries' %}selected{% endif %}>🔋 Bateria (Troca / Descarregada)</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceAirConditioning" {% if item.motivo_classe == 'CorrectiveMaintenanceAirConditioning' %}selected{% endif %}>❄️ Ar Condicionado</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceBodyShop" {% if item.motivo_classe == 'CorrectiveMaintenanceBodyShop' %}selected{% endif %}>🔨 Funilaria / Lataria</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceGlasses" {% if item.motivo_classe == 'CorrectiveMaintenanceGlasses' %}selected{% endif %}>🪟 Vidros / Para-brisa</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceTires" {% if item.motivo_classe == 'CorrectiveMaintenanceTires' %}selected{% endif %}>🛞 Pneu Danificado (Furo / Rasgo)</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceLeakage" {% if item.motivo_classe == 'CorrectiveMaintenanceLeakage' %}selected{% endif %}>💧 Vazamentos (Óleo / Água)</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceAbnormalNoise" {% if item.motivo_classe == 'CorrectiveMaintenanceAbnormalNoise' %}selected{% endif %}>🔊 Ruído Anormal / Barulho</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenanceVehicleWontStart" {% if item.motivo_classe == 'CorrectiveMaintenanceVehicleWontStart' %}selected{% endif %}>🚫 Veículo não liga / Não dá partida</option>
+                                        <option value="CorrectiveMaintenance|CorrectiveMaintenancePicks" {% if item.motivo_classe == 'CorrectiveMaintenancePicks' %}selected{% endif %}>🔍 Retoques / Martelinho</option>
                                     </optgroup>
-                                    <optgroup label="Preventivas (Revisões)">
-                                        <option value="PreventiveMaintenance|PreventiveMaintenanceQuilometerRevision" {% if item.motivo_id == '1' or item.motivo_id == 'PreventiveMaintenance' %}selected{% endif %}>Revisão por Quilometragem</option>
-                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTimeRevision">Revisão por Tempo</option>
-                                        <option value="PreventiveMaintenance|PreventiveMaintenanceOilExchange">Troca de Óleo</option>
-                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTires">Troca de Pneus</option>
+                                    <optgroup label="🟢 Preventivas (Revisões Periódicas)">
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceQuilometerRevision" {% if item.motivo_classe == 'PreventiveMaintenanceQuilometerRevision' or item.motivo_id == '1' or item.motivo_id == 'PreventiveMaintenance' %}selected{% endif %}>🚗 Revisão por Quilometragem (KM)</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTimeRevision" {% if item.motivo_classe == 'PreventiveMaintenanceTimeRevision' %}selected{% endif %}>📅 Revisão por Tempo / Período</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceOilExchange" {% if item.motivo_classe == 'PreventiveMaintenanceOilExchange' %}selected{% endif %}>🛢️ Troca de Óleo e Filtros</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceTires" {% if item.motivo_classe == 'PreventiveMaintenanceTires' %}selected{% endif %}>🛞 Troca de Pneus (Desgaste Natural)</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceBalancingAlignment" {% if item.motivo_classe == 'PreventiveMaintenanceBalancingAlignment' %}selected{% endif %}>⚖️ Alinhamento e Balanceamento</option>
+                                        <option value="PreventiveMaintenance|PreventiveMaintenanceBrakes" {% if item.motivo_classe == 'PreventiveMaintenanceBrakes' %}selected{% endif %}>🛑 Freios (Revisão Preventiva)</option>
                                     </optgroup>
-                                    <optgroup label="Sinistros (Opcional)">
-                                        <option value="Claim|ClaimAccidentCollision">Acidente / Colisão</option>
-                                        <option value="Claim|ClaimTheftOrRobberyVehicle">Roubo / Furto de Veículo</option>
-                                        <option value="Claim|ClaimGlasses">Quebra de Vidros</option>
+                                    <optgroup label="🔴 Sinistros (Acidentes / Furtos)">
+                                        <option value="Claim|ClaimAccidentCollision" {% if item.motivo_classe == 'ClaimAccidentCollision' %}selected{% endif %}>💥 Acidente / Colisão</option>
+                                        <option value="Claim|ClaimBodyAndPainting" {% if item.motivo_classe == 'ClaimBodyAndPainting' %}selected{% endif %}>🎨 Funilaria e Pintura Completa</option>
+                                        <option value="Claim|ClaimGlasses" {% if item.motivo_classe == 'ClaimGlasses' %}selected{% endif %}>🪟 Quebra de Vidros (Sinistro)</option>
+                                        <option value="Claim|ClaimTheftOrRobberyVehicle" {% if item.motivo_classe == 'ClaimTheftOrRobberyVehicle' %}selected{% endif %}>🚨 Roubo ou Furto de Veículo</option>
+                                        <option value="Claim|ClaimTheftOrRobberyAccessories" {% if item.motivo_classe == 'ClaimTheftOrRobberyAccessories' %}selected{% endif %}>📻 Furto de Rodas / Acessórios</option>
+                                        <option value="Claim|ClaimFlooding" {% if item.motivo_classe == 'ClaimFlooding' %}selected{% endif %}>🌊 Alagamento / Enchente</option>
                                     </optgroup>
                                 </select>
                             </div>
@@ -77,11 +92,19 @@
                             <hr>
                             <p class="card-text mb-1"><small><strong>Solicitante:</strong> <span id="solic_{{ item.id_aprovacao }}">{{ item.solicitante }}</span></small></p>
                             <p class="card-text mb-1"><small><strong>Telefone:</strong> <span id="tel_{{ item.id_aprovacao }}">{{ item.telefone }}</span></small></p>
-                            <p class="card-text mb-3"><small><strong>Leva e Traz:</strong> {{ 'Sim' if item.leva_e_traz else 'Não' }}</small></p>
+                            <p class="card-text mb-2"><small><strong>Leva e Traz:</strong> {{ 'Sim' if item.leva_e_traz else 'Não' }}</small></p>
+
+                            {% if item.caminho_pdf or item.pdf_nome %}
+                            <div class="mb-3">
+                                <a href="/painel/checklist-pdf/{{ item.id_aprovacao }}" target="_blank" class="btn btn-outline-primary btn-sm w-100 fw-bold">
+                                    📄 Ver PDF do Checklist
+                                </a>
+                            </div>
+                            {% endif %}
                         </div>
                         <div class="card-footer bg-white d-flex justify-content-between">
                             <button class="btn btn-danger btn-sm" onclick="rejeitarChecklist('{{ item.id_aprovacao }}')">Descartar</button>
-                            <button class="btn btn-success btn-sm" onclick="aprovarChecklist('{{ item.id_aprovacao }}')">Aprovar e Enviar</button>
+                            <button class="btn btn-success btn-sm fw-bold" onclick="aprovarChecklist('{{ item.id_aprovacao }}')">Aprovar e Enviar</button>
                         </div>
                     </div>
                 </div>
@@ -102,11 +125,17 @@
                 km_atual: document.getElementById('km_' + id).value,
                 descricao: document.getElementById('desc_' + id).value,
                 data_agendamento: document.getElementById('data_' + id).value,
-                motivo_id: escolhas[0],       // Ex: CorrectiveMaintenance
+                motivo_id: escolhas[0],       // Ex: CorrectiveMaintenance ou PreventiveMaintenance
                 motivo_classe: escolhas[1],   // Ex: CorrectiveMaintenanceMechanicalFailure
                 solicitante: document.getElementById('solic_' + id).innerText,
                 telefone: document.getElementById('tel_' + id).innerText
             };
+
+            const btnAprovar = document.querySelector('#card_' + id + ' .btn-success');
+            if(btnAprovar) {
+                btnAprovar.disabled = true;
+                btnAprovar.innerText = "Enviando...";
+            }
 
             try {
                 let response = await fetch('/painel/aprovar/' + id, {
@@ -118,13 +147,21 @@
                 let data = await response.json();
                 
                 if (data.isSuccess) {
-                    alert("Sucesso! ID da Ocorrência: " + data.contractItemRequestId);
+                    alert("Sucesso! Ocorrência criada na Blue Fleet: ID " + data.contractItemRequestId);
                     document.getElementById('card_' + id).remove();
                 } else {
-                    alert("Erro da Blue Fleet: " + data.erro);
+                    alert("Erro da Blue Fleet: " + (data.erro || JSON.stringify(data)));
+                    if(btnAprovar) {
+                        btnAprovar.disabled = false;
+                        btnAprovar.innerText = "Aprovar e Enviar";
+                    }
                 }
             } catch (error) {
-                alert("Erro ao conectar com o servidor local.");
+                alert("Erro ao conectar com o servidor local: " + error);
+                if(btnAprovar) {
+                    btnAprovar.disabled = false;
+                    btnAprovar.innerText = "Aprovar e Enviar";
+                }
             }
         }
 
