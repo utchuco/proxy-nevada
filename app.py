@@ -514,37 +514,52 @@ def painel_aprovar(id_aprovacao):
             "Accept": "application/json"
         }
         
-        # 3. Resolução infalível do ContractItemId
+        # 3. Resolução infalível do ContractItemId ATUAL (Prioriza sempre o contrato ativo)
         contract_item_id = None
         
-        r_oc = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers=headers)
-        if r_oc.status_code == 200:
-            ocs = r_oc.json().get("data", [])
-            for oc in ocs:
-                if oc.get("contractItemId"):
-                    contract_item_id = oc.get("contractItemId")
-                    break
-        
+        # Estratégia 1: Busca o contrato ativo vinculado diretamente ao veículo
+        r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
+        if r_veic.status_code == 200:
+            veiculos = r_veic.json().get("data", [])
+            if veiculos:
+                contrato = veiculos[0].get("contract") or {}
+                contrato_id = contrato.get("contractId")
+                veiculo_id = veiculos[0].get("vehicleId")
+                
+                if contrato_id:
+                    r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers)
+                    if r_items.status_code == 200:
+                        itens = r_items.json().get("data", r_items.json())
+                        if isinstance(itens, list):
+                            for item_c in itens:
+                                if item_c.get("vehicleId") == veiculo_id:
+                                    contract_item_id = item_c.get("contractItemId") or item_c.get("id")
+                                    break
+                            if not contract_item_id and itens:
+                                contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+
+        # Estratégia 2: Busca por itens de contrato ativos da placa (/contract-item/search)
         if not contract_item_id:
-            r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
-            if r_veic.status_code == 200:
-                veiculos = r_veic.json().get("data", [])
-                if veiculos:
-                    contrato = veiculos[0].get("contract") or {}
-                    contrato_id = contrato.get("contractId")
-                    veiculo_id = veiculos[0].get("vehicleId")
-                    
-                    if contrato_id:
-                        r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers)
-                        if r_items.status_code == 200:
-                            itens = r_items.json().get("data", r_items.json())
-                            if isinstance(itens, list):
-                                for item_c in itens:
-                                    if item_c.get("vehicleId") == veiculo_id:
-                                        contract_item_id = item_c.get("contractItemId") or item_c.get("id")
-                                        break
-                                if not contract_item_id and itens:
-                                    contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+            r_ci = requests.get(f"{API_URL}/contract-item/search?LicensePlate={placa_api}", headers=headers)
+            if r_ci.status_code == 200:
+                itens_ci = r_ci.json().get("data", [])
+                for it in itens_ci:
+                    status_nome = str(it.get("contractItemStatusName", "")).lower()
+                    if "andamento" in status_nome or str(it.get("contractItemStatusId")) == "1":
+                        contract_item_id = it.get("contractItemId")
+                        break
+                if not contract_item_id and itens_ci:
+                    contract_item_id = itens_ci[0].get("contractItemId")
+
+        # Estratégia 3: Histórico recente (apenas último recurso)
+        if not contract_item_id:
+            r_oc = requests.get(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers=headers)
+            if r_oc.status_code == 200:
+                ocs = r_oc.json().get("data", [])
+                for oc in ocs:
+                    if oc.get("contractItemId"):
+                        contract_item_id = oc.get("contractItemId")
+                        break
 
         if not contract_item_id:
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
@@ -606,13 +621,20 @@ def painel_aprovar(id_aprovacao):
             resp_dados = resp_bf.json()
             req_id = resp_dados.get("data", {}).get("contractItemRequestId")
             
-            # 6. Avanço Automático para a fila certa (Check-in do Veículo)
+            # 6. Avanço Automático do Workflow até Aguardando Orçamento
             try:
-                url_checkin = f"{API_URL}/contract-item-request/{req_id}/waiting-checkin"
-                r_chk = requests.post(url_checkin, headers=headers, json={"confirmVehicleCheckinDate": data_iso}, timeout=5)
-                print(f"Avanço de fila para check-in (Status {r_chk.status_code}): {r_chk.text}")
+                # Passo 1: Pré-Agendamento -> Confirmação de Agenda
+                requests.post(f"{API_URL}/contract-item-request/{req_id}/pre-scheduling", 
+                              headers=headers, json={"providerId": 197, "scheduledFor": data_iso}, timeout=5)
+                # Passo 2: Confirmação de Agenda -> Aguardando Chegada
+                requests.post(f"{API_URL}/contract-item-request/{req_id}/schedule-confirmation", 
+                              headers=headers, timeout=5)
+                # Passo 3: Aguardando Chegada -> Aguardando Orçamento (Data de Entrada)
+                r_chk = requests.post(f"{API_URL}/contract-item-request/{req_id}/waiting-checkin", 
+                                      headers=headers, json={"confirmVehicleCheckinDate": data_iso}, timeout=5)
+                print(f"Avanço de fila concluído para ocorrência {req_id} (Status {r_chk.status_code})")
             except Exception as e_chk:
-                print(f"Aviso: falha ao avançar ocorrência {req_id} para check-in: {e_chk}")
+                print(f"Aviso: falha na transição automática de fila: {e_chk}")
 
             with open(caminho_pendentes, 'w', encoding='utf-8') as f:
                 json.dump(nova_fila, f, ensure_ascii=False, indent=4)
