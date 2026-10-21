@@ -88,3 +88,4 @@ def api_sugestoes():
     termo = request.args.get("q", "")
     placas = buscar_sugestoes_placas(termo)
     return jsonify({"placas": placas})
+

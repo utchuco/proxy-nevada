@@ -91,3 +91,4 @@ def buscar_sugestoes_placas(termo_busca, limite=50):
     except Exception as e:
         print(f"Erro ao ler cache de sugestões: {e}")
         return []
+

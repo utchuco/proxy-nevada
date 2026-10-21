@@ -116,7 +116,7 @@
 
                             {% if item.caminho_pdf or item.pdf_nome %}
                             <div class="mb-2">
-                                <a href="/painel/checklist-pdf/{{ item.id_aprovacao }}" target="_blank" class="btn btn-outline-secondary btn-sm w-100">
+                                <a href="/painel-nevada/checklist-pdf/{{ item.id_aprovacao }}" target="_blank" class="btn btn-outline-secondary btn-sm w-100">
                                     Ver PDF do Checklist
                                 </a>
                             </div>
@@ -219,7 +219,7 @@
             }
 
             try {
-                const response = await fetch('/painel/aprovar/' + id, {
+                const response = await fetch('/painel-nevada/aprovar/' + id, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -250,7 +250,7 @@
             if(!confirm("Tem certeza que deseja descartar este checklist?")) return;
 
             try {
-                const response = await fetch('/painel/rejeitar/' + id, { method: 'POST' });
+                const response = await fetch('/painel-nevada/rejeitar/' + id, { method: 'POST' });
                 const data = await response.json();
                 if (data.isSuccess) {
                     document.getElementById('card_' + id).remove();

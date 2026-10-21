@@ -15,7 +15,6 @@ from services.bluefleet_service import (
 
 painel_bp = Blueprint("painel", __name__)
 
-@painel_bp.route("/painel", methods=["GET"])
 @painel_bp.route("/painel-nevada", methods=["GET"])
 def painel_nevada():
     pendentes = obter_checklists_pendentes()
@@ -31,7 +30,7 @@ def painel_nevada():
 
     return render_template("painel.html", checklists=pendentes)
 
-@painel_bp.route("/painel/checklist-pdf/<id_aprovacao>", methods=["GET"])
+@painel_bp.route("/painel-nevada/checklist-pdf/<id_aprovacao>", methods=["GET"])
 def ver_pdf_checklist(id_aprovacao):
     caminho_pdf = obter_pdf_checklist_path(id_aprovacao)
     if caminho_pdf:
@@ -41,7 +40,6 @@ def ver_pdf_checklist(id_aprovacao):
             return f"Erro ao abrir arquivo PDF: {str(e)}", 500
     return "Checklist ou PDF não encontrado.", 404
 
-@painel_bp.route("/painel/aprovar/<id_aprovacao>", methods=["POST"])
 @painel_bp.route("/painel-nevada/aprovar/<id_aprovacao>", methods=["POST"])
 def painel_aprovar(id_aprovacao):
     checklist_alvo = obter_checklist_por_id(id_aprovacao)
@@ -182,9 +180,9 @@ def painel_aprovar(id_aprovacao):
     except Exception as e:
         return jsonify({"isSuccess": False, "erro": f"Erro interno ao disparar: {str(e)}"}), 500
 
-@painel_bp.route("/painel/descartar/<id_aprovacao>", methods=["POST"])
-@painel_bp.route("/painel/rejeitar/<id_aprovacao>", methods=["POST"])
+@painel_bp.route("/painel-nevada/descartar/<id_aprovacao>", methods=["POST"])
 @painel_bp.route("/painel-nevada/rejeitar/<id_aprovacao>", methods=["POST"])
 def painel_rejeitar(id_aprovacao):
     remover_checklist_pendente(id_aprovacao)
     return jsonify({"isSuccess": True, "mensagem": "Checklist descartado com sucesso."}), 200
+

@@ -54,3 +54,4 @@ def acessar_crlv():
         return send_file(caminho_arquivo, mimetype="application/pdf")
 
     return f"Documento não encontrado para a placa {placa}.", 404
+
