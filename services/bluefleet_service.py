@@ -79,21 +79,43 @@ def buscar_dados_veiculo_e_reserva(placa):
         # Lógica 1: Pesquisou o Reserva (Status 14)
         if str(veiculo_base.get("vehicleStatusId")) == "14":
             carro_reserva = veiculo_base
+
+            # 1. Tenta obter o titular diretamente de /vehicle/{vehicleId}/contract-item
             try:
-                r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers)
-                if r_ocorrencia.status_code == 200:
-                    ocorrencias = r_ocorrencia.json().get("data", [])
-                    if ocorrencias:
-                        ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                        for oc in ocorrencias:
-                            placa_titular = oc.get("licensePlate")
-                            if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
-                                r_titular = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers)
-                                if r_titular.status_code == 200 and r_titular.json().get("data"):
-                                    carro_titular = r_titular.json().get("data")[0]
-                                    break
+                v_res_id = veiculo_base.get("vehicleId")
+                r_vci = get_blindado(f"{API_URL}/vehicle/{v_res_id}/contract-item", headers, rapido=True)
+                if r_vci.status_code == 200:
+                    for it in r_vci.json().get("data", []):
+                        tipo_nome = str(it.get("vehicleTypeName", "")).lower()
+                        tipo_id = str(it.get("vehicleTypeId", ""))
+                        final_date = it.get("finalDate")
+                        placa_tit_cand = it.get("contractLicensePlate")
+
+                        if (tipo_nome == "reserva" or tipo_id == "2") and not final_date and placa_tit_cand:
+                            r_tit = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_tit_cand}", headers)
+                            if r_tit.status_code == 200 and r_tit.json().get("data"):
+                                carro_titular = r_tit.json().get("data")[0]
+                                break
             except Exception:
                 pass
+
+            # 2. Fallback: Se não encontrou pelo contract-item, busca pelas ocorrências
+            if not carro_titular:
+                try:
+                    r_ocorrencia = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa}", headers)
+                    if r_ocorrencia.status_code == 200:
+                        ocorrencias = r_ocorrencia.json().get("data", [])
+                        if ocorrencias:
+                            ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+                            for oc in ocorrencias:
+                                placa_titular = oc.get("licensePlate")
+                                if placa_titular and placa_titular.replace("-", "").upper() != placa_limpa_base:
+                                    r_titular = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_titular}", headers)
+                                    if r_titular.status_code == 200 and r_titular.json().get("data"):
+                                        carro_titular = r_titular.json().get("data")[0]
+                                        break
+                except Exception:
+                    pass
 
         # Lógica 2: Pesquisou o Titular
         else:
@@ -103,13 +125,13 @@ def buscar_dados_veiculo_e_reserva(placa):
                 if r_ocorrencia.status_code == 200:
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-                    
+
                     for oc in ocorrencias[:10]:
                         time.sleep(0.1)
                         req_id = oc.get("contractItemRequestId")
                         if not req_id:
                             continue
-                        
+
                         r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files", headers, rapido=True)
                         if r_files.status_code == 200:
                             arquivos = r_files.json().get("data", r_files.json())
@@ -125,9 +147,30 @@ def buscar_dados_veiculo_e_reserva(placa):
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
-                                                    carro_reserva = v_teste
-                                                    reserva_oculta_detectada = False
-                                                    break
+                                                    # Validação Dupla: Verifica se este reserva está ativamente alocado para ESTE titular
+                                                    v_res_id = v_teste.get("vehicleId")
+                                                    r_vci = get_blindado(f"{API_URL}/vehicle/{v_res_id}/contract-item", headers, rapido=True)
+                                                    alocado_para_este_titular = False
+
+                                                    if r_vci.status_code == 200:
+                                                        for it in r_vci.json().get("data", []):
+                                                            p_contrato = str(it.get("contractLicensePlate", "")).replace("-", "").upper()
+                                                            tipo_nome = str(it.get("vehicleTypeName", "")).lower()
+                                                            tipo_id = str(it.get("vehicleTypeId", ""))
+                                                            final_date = it.get("finalDate")
+
+                                                            if p_contrato == placa_limpa_base and (tipo_nome == "reserva" or tipo_id == "2") and not final_date:
+                                                                alocado_para_este_titular = True
+                                                                break
+
+                                                    if alocado_para_este_titular:
+                                                        carro_reserva = v_teste
+                                                        reserva_oculta_detectada = False
+                                                        break
+                                                    else:
+                                                        # Foi achada uma placa nos checklists que é reserva, mas não está ativa para este titular
+                                                        reserva_oculta_detectada = True
+
                         if carro_reserva:
                             break
             except Exception as e:
@@ -135,9 +178,13 @@ def buscar_dados_veiculo_e_reserva(placa):
 
             if not carro_reserva:
                 try:
-                    if 'r_ocorrencia' in locals() and r_ocorrencia.status_code == 200:
-                        for oc in ocorrencias[:5]:
-                            if "RESERVA" in json.dumps(oc).upper() and "AGUARDANDO DEVOLU" in json.dumps(oc).upper():
+                    if 'ocorrencias' in locals() and ocorrencias:
+                        for oc in ocorrencias[:10]:
+                            reason_id = str(oc.get("contractItemRequestReasonId", ""))
+                            reason_name = str(oc.get("contractItemRequestReasonName", "")).lower()
+                            status_name = str(oc.get("contractItemRequestStatusName", "")).lower()
+                            step_name = str(oc.get("workflowStepName", "")).lower()
+                            if (reason_id == "5" or "reserva" in reason_name or "reserva" in json.dumps(oc).lower()) and ("andamento" in status_name or "aguardando devolu" in step_name):
                                 reserva_oculta_detectada = True
                                 break
                 except Exception:

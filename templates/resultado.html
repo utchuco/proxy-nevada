@@ -13,11 +13,11 @@
     <div class="container" style="text-align: center;">
         <h2>Detalhes da Consulta</h2>
 
-        <!-- AVISO INTELIGENTE: Se a API blindar totalmente a placa do reserva -->
+        <!-- AVISO INTELIGENTE: Se houver reserva ativo mas não foi possível confirmar a placa exata -->
         {% if aviso_reserva and not reserva %}
             <div style="margin-bottom: 20px; padding: 15px; background-color: #fff3cd; color: #856404; border-radius: 8px; border-left: 5px solid #ffc107; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <h4 style="margin-top: 0; margin-bottom: 5px;">⚠️ Veículo em Manutenção</h4>
-                <p style="font-size: 14px; margin: 0;">Identificamos que um Carro Reserva foi liberado, mas a locadora não exportou a placa dele. Para acessar o Check-list, <strong>faça uma nova busca utilizando a placa física do veículo reserva.</strong></p>
+                <h4 style="margin-top: 0; margin-bottom: 5px;">⚠️ Carro Reserva em Andamento</h4>
+                <p style="font-size: 14px; margin: 0;">Identificamos que este veículo possui um <strong>Carro Reserva ativo</strong> no sistema, mas não foi possível confirmar a placa vinculada a ele. Para consultar o checklist, <strong>faça uma nova busca utilizando a placa física do carro reserva</strong>.</p>
             </div>
         {% endif %}
 
