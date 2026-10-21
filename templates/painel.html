@@ -30,7 +30,7 @@
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
                 {% for item in checklists %}
                 <div class="col" id="card_{{ item.id_aprovacao }}">
-                    <div class="card card-checklist h-100">
+                    <div class="card card-checklist h-100" data-id="{{ item.id_aprovacao }}" data-classe="{{ item.motivo_classe }}">
                         <div class="card-header-custom d-flex justify-content-between align-items-center">
                             <div>
                                 <span class="fw-bold fs-6">Placa: {{ item.placa }}</span>
@@ -192,9 +192,11 @@
 
         // Inicializa cada card com sua respectiva classe inicial
         document.addEventListener('DOMContentLoaded', function() {
-            {% for item in checklists %}
-                atualizarClasses('{{ item.id_aprovacao }}', '{{ item.motivo_classe }}');
-            {% endfor %}
+            document.querySelectorAll('.card-checklist[data-id]').forEach(function(card) {
+                const id = card.getAttribute('data-id');
+                const classe = card.getAttribute('data-classe');
+                atualizarClasses(id, classe);
+            });
         });
 
         async function aprovarChecklist(id) {
