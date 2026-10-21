@@ -3,58 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detalhes do Veículo - Nevada</title>
+    <title>Detalhes do Veículo - Locadora Nevada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="theme-color" content="#0056b3">
+    <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
 </head>
 <body>
-    <div class="container" style="text-align: center;">
-        <h2>Detalhes da Consulta</h2>
+    <div class="main-wrapper">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <a href="/" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 700; color: #475569; text-decoration: none; padding: 6px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Nova Busca</span>
+            </a>
+            <span class="brand-badge">Locadora Nevada</span>
+        </div>
 
-        <!-- AVISO INTELIGENTE: Se houver reserva ativo mas não foi possível confirmar a placa exata -->
+        <!-- AVISO: Se houver reserva ativo mas sem placa confirmada -->
         {% if aviso_reserva and not reserva %}
-            <div style="margin-bottom: 20px; padding: 15px; background-color: #fff3cd; color: #856404; border-radius: 8px; border-left: 5px solid #ffc107; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <h4 style="margin-top: 0; margin-bottom: 5px;">⚠️ Carro Reserva em Andamento</h4>
-                <p style="font-size: 14px; margin: 0;">Identificamos que este veículo possui um <strong>Carro Reserva ativo</strong> no sistema, mas não foi possível confirmar a placa vinculada a ele. Para consultar o checklist, <strong>faça uma nova busca utilizando a placa física do carro reserva</strong>.</p>
+        <div class="alert-card">
+            <div class="alert-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Carro Reserva em Andamento</span>
             </div>
+            <p class="alert-desc">
+                Identificamos que este veículo possui um carro reserva ativo no sistema, mas não foi possível confirmar a placa vinculada. Para visualizar o checklist, faça uma busca informando a placa física do veículo reserva.
+            </p>
+        </div>
         {% endif %}
 
         {% if reserva and not titular %}
-            <div style="margin-bottom: 15px; padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 8px; font-weight: bold; border-left: 5px solid #ffc107; text-align: left;">
-                Atenção: Este é um veículo reserva.
+        <div class="alert-card" style="background-color: #eff6ff; border-color: #bfdbfe; border-left-color: #2563eb;">
+            <div class="alert-title" style="color: #1e40af;">
+                <span>Consulta de Veículo Reserva</span>
             </div>
+            <p class="alert-desc" style="color: #1e3a8a;">
+                Esta placa está cadastrada como veículo reserva na frota.
+            </p>
+        </div>
         {% endif %}
-        
+
         <!-- BLOCO TITULAR -->
         {% if titular %}
-        <div style="text-align: left; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #0056b3;">
-            <h3 style="margin-top: 0; color: #0056b3;">{{ titular.licensePlate }}</h3>
-            
-            <p><strong>Montadora:</strong> {{ titular.automakerName }}</p>
-            <p><strong>Modelo:</strong> {{ titular.vehicleModelName }}</p>
-            <p><strong>Cor:</strong> {{ titular.vehicleColor }}</p>
-            <p><strong>Ano:</strong> {{ titular.manufactureYear }} / {{ titular.modelYear }}</p>
-            <p><strong>Status:</strong> <span style="background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ titular.vehicleStatusName }}</span></p>
-            
-            <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
-            
-            <h4 style="margin-bottom: 10px; color: #333;">Dados da Locação</h4>
-            {% if titular.contract and titular.contract.customer %}
-                <p><strong>Cliente:</strong> {{ titular.contract.customer.tradingName }}</p>
-            {% else %}
-                <p><em>Sem contrato ativo vinculado no momento.</em></p>
-            {% endif %}
-            
-            <p><strong>Último Km Registrado:</strong> {{ titular.informedOdometer }} km</p>
+        <div class="card-container">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <div>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; letter-spacing: 0.5px; text-transform: uppercase;">Veículo Titular</span>
+                    <h2 style="font-size: 1.6rem; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ titular.licensePlate }}</h2>
+                </div>
+                <span class="status-pill status-pill-green">{{ titular.vehicleStatusName or 'Locado' }}</span>
+            </div>
 
-            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
-                <button onclick="abrirChecklist('{{ titular.licensePlate }}', this)" style="padding: 10px 16px; background-color: #0056b3; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    Ver Checklist do Titular
+            <div style="font-size: 0.95rem; font-weight: 600; color: #334155; margin-bottom: 14px;">
+                {{ titular.automakerName }} {{ titular.vehicleModelName }}
+            </div>
+
+            <!-- Ficha Técnica em Grid de 2 Colunas -->
+            <div class="spec-grid">
+                <div class="spec-item">
+                    <span class="spec-label">Montadora</span>
+                    <span class="spec-value">{{ titular.automakerName }}</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Ano Modelo</span>
+                    <span class="spec-value">{{ titular.manufactureYear }} / {{ titular.modelYear }}</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Cor</span>
+                    <span class="spec-value">{{ titular.vehicleColor or 'Não informado' }}</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Último Odômetro</span>
+                    <span class="spec-value">{{ titular.informedOdometer }} km</span>
+                </div>
+            </div>
+
+            <!-- Dados da Locação -->
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px;">
+                <span class="spec-label">Cliente / Locação</span>
+                <span style="font-size: 0.85rem; font-weight: 700; color: #1e293b; display: block; margin-top: 2px;">
+                    {% if titular.contract and titular.contract.customer %}
+                        {{ titular.contract.customer.tradingName }}
+                    {% else %}
+                        Locação Corporativa Ativa
+                    {% endif %}
+                </span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button onclick="abrirChecklist('{{ titular.licensePlate }}', this)" class="btn-action-blue">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Checklist do Titular</span>
                 </button>
-                <button onclick="solicitarSenhaCrlv('{{ titular.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    Ver CRLV do Titular
+                <button onclick="solicitarSenhaCrlv('{{ titular.licensePlate }}')" class="btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>CRLV do Titular (Documento)</span>
                 </button>
             </div>
         </div>
@@ -62,42 +121,74 @@
 
         <!-- BLOCO RESERVA -->
         {% if reserva %}
-        <div style="text-align: left; background: #fffdf5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-            <h3 style="margin-top: 0; color: #856404;">Carro Reserva: {{ reserva.licensePlate }}</h3>
+        <div class="card-container card-reserva">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <div>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: #b45309; letter-spacing: 0.5px; text-transform: uppercase;">Carro Reserva Vinculado</span>
+                    <h2 style="font-size: 1.6rem; font-weight: 800; color: #92400e; margin-top: 2px;">{{ reserva.licensePlate }}</h2>
+                </div>
+                <span class="status-pill status-pill-amber">Reserva Ativo</span>
+            </div>
 
-            <p><strong>Montadora:</strong> {{ reserva.automakerName }}</p>
-            <p><strong>Modelo:</strong> {{ reserva.vehicleModelName }}</p>
-            <p><strong>Cor:</strong> {{ reserva.vehicleColor }}</p>
-            <p><strong>Ano:</strong> {{ reserva.manufactureYear }} / {{ reserva.modelYear }}</p>
-            <p><strong>Status:</strong> <span style="background-color: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{{ reserva.vehicleStatusName }}</span></p>
+            <div style="font-size: 0.95rem; font-weight: 600; color: #78350f; margin-bottom: 14px;">
+                {{ reserva.automakerName }} {{ reserva.vehicleModelName }}
+            </div>
 
-            <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">
+            <div class="spec-grid">
+                <div class="spec-item" style="background-color: #ffffff;">
+                    <span class="spec-label">Montadora</span>
+                    <span class="spec-value">{{ reserva.automakerName }}</span>
+                </div>
+                <div class="spec-item" style="background-color: #ffffff;">
+                    <span class="spec-label">Ano Modelo</span>
+                    <span class="spec-value">{{ reserva.manufactureYear }} / {{ reserva.modelYear }}</span>
+                </div>
+                <div class="spec-item" style="background-color: #ffffff;">
+                    <span class="spec-label">Cor</span>
+                    <span class="spec-value">{{ reserva.vehicleColor or 'Não informado' }}</span>
+                </div>
+                <div class="spec-item" style="background-color: #ffffff;">
+                    <span class="spec-label">Último Odômetro</span>
+                    <span class="spec-value">{{ reserva.informedOdometer }} km</span>
+                </div>
+            </div>
 
-            <p><strong>Último Km Registrado:</strong> {{ reserva.informedOdometer }} km</p>
-
-            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
-                <button onclick="abrirChecklist('{{ reserva.licensePlate }}', this)" style="padding: 10px 16px; background-color: #ffc107; color: #333; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    Ver Checklist do Reserva
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button onclick="abrirChecklist('{{ reserva.licensePlate }}', this)" style="background-color: #d97706;" class="btn-action-blue">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Checklist do Reserva</span>
                 </button>
-                <button onclick="solicitarSenhaCrlv('{{ reserva.licensePlate }}')" style="padding: 10px 16px; background-color: #6c757d; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold; width: 100%;">
-                    Ver CRLV do Reserva
+                <button onclick="solicitarSenhaCrlv('{{ reserva.licensePlate }}')" class="btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>CRLV do Reserva (Documento)</span>
                 </button>
             </div>
         </div>
         {% endif %}
 
-        <!-- Formulário Oculto Único para os botões de CRLV -->
+        <!-- Formulário Oculto para download do CRLV com senha -->
         <form id="formCrlv" action="/crlv" method="POST" style="display: none;">
             <input type="hidden" name="placa" id="inputPlacaCrlv">
             <input type="hidden" name="senha" id="inputSenhaCrlv">
         </form>
 
-        <a href="/" style="display: inline-block; padding: 15px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; width: 100%; box-sizing: border-box; font-size: 16px; margin-top: 10px;">Fazer Nova Busca</a>
+        <a href="/" class="btn-secondary" style="margin-top: 12px; text-decoration: none;">
+            Consultar Outra Placa
+        </a>
     </div>
 
     <script>
         function solicitarSenhaCrlv(placaSelecionada) {
-            var senha = prompt("Acesso Restrito\nDigite a senha da frota para a placa " + placaSelecionada + ":");
+            var senha = prompt("Acesso Restrito\nDigite a senha para acessar o documento do veículo " + placaSelecionada + ":");
             if (senha) {
                 document.getElementById('inputPlacaCrlv').value = placaSelecionada;
                 document.getElementById('inputSenhaCrlv').value = senha;
@@ -107,19 +198,15 @@
 
         function abrirChecklist(placaSelecionada, btnElement) {
             var textoOriginal = btnElement.innerHTML;
-            btnElement.innerHTML = 'Buscando Checklist... ⏳';
-            btnElement.style.backgroundColor = '#6c757d';
+            btnElement.innerHTML = '<span>Carregando Documento...</span>';
+            btnElement.style.opacity = '0.7';
             btnElement.disabled = true;
             
             window.open('/checklist/' + placaSelecionada, '_blank');
             
             setTimeout(function() {
                 btnElement.innerHTML = textoOriginal;
-                if(textoOriginal.includes('Reserva')){
-                    btnElement.style.backgroundColor = '#ffc107';
-                } else {
-                    btnElement.style.backgroundColor = '#0056b3';
-                }
+                btnElement.style.opacity = '1';
                 btnElement.disabled = false;
             }, 3000);
         }
