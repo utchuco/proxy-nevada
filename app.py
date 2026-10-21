@@ -335,11 +335,52 @@ def receber_checklist():
         except Exception as e_pdf:
             print(f"Aviso: Erro ao salvar PDF do checklist: {e_pdf}")
 
+    # Enriquecimento automático com dados da Blue Fleet (Modelo, Cliente, Contrato)
+    modelo_veiculo = ""
+    montadora = ""
+    cliente_nome = ""
+    contrato_id = None
+    contract_item_id = None
+
+    try:
+        token = get_access_token()
+        headers_bf = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        placa_consulta = f"{placa_limpa[:3]}-{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa_limpa
+
+        r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_consulta}", headers=headers_bf, timeout=5)
+        if r_veic.status_code == 200 and r_veic.json().get("data"):
+            veic = r_veic.json()["data"][0]
+            modelo_veiculo = veic.get("vehicleModelName", "")
+            montadora = veic.get("automakerName", "")
+            veiculo_id = veic.get("vehicleId")
+
+            contrato = veic.get("contract") or {}
+            contrato_id = contrato.get("contractId")
+            cliente_nome = (contrato.get("customer") or {}).get("tradingName", "")
+
+            # Se possui contrato ativo, já descobre o contractItemId de imediato
+            if contrato_id:
+                r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers_bf, timeout=5)
+                if r_items.status_code == 200:
+                    itens = r_items.json().get("data", r_items.json())
+                    if isinstance(itens, list):
+                        for it in itens:
+                            if it.get("vehicleId") == veiculo_id:
+                                contract_item_id = it.get("contractItemId") or it.get("id")
+                                break
+    except Exception as e_enrich:
+        print(f"Aviso: Não foi possível enriquecer dados da placa {placa_limpa}: {e_enrich}")
+
     novo_pendente = {
         "id_aprovacao": id_aprovacao,
         "placa": placa_limpa,
         "km_atual": dados.get("km_atual") or dados.get("km") or 0,
         "tipo_veiculo": dados.get("tipo_veiculo", "alugado").lower(),
+        "modelo_veiculo": modelo_veiculo,
+        "montadora": montadora,
+        "cliente_nome": cliente_nome,
+        "contrato_id": contrato_id,
+        "contract_item_id": contract_item_id,
         "motivo_id": str(motivo_id),
         "motivo_classe": str(motivo_classe),
         "plano_revisao_id": str(dados.get("plano_revisao_id", "149")),
@@ -515,28 +556,30 @@ def painel_aprovar(id_aprovacao):
         }
         
         # 3. Resolução infalível do ContractItemId ATUAL (Prioriza sempre o contrato ativo)
-        contract_item_id = None
+        contract_item_id = checklist_alvo.get("contract_item_id")
         
-        # Estratégia 1: Busca o contrato ativo vinculado diretamente ao veículo
-        r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
-        if r_veic.status_code == 200:
-            veiculos = r_veic.json().get("data", [])
-            if veiculos:
-                contrato = veiculos[0].get("contract") or {}
-                contrato_id = contrato.get("contractId")
-                veiculo_id = veiculos[0].get("vehicleId")
-                
-                if contrato_id:
-                    r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers)
-                    if r_items.status_code == 200:
-                        itens = r_items.json().get("data", r_items.json())
-                        if isinstance(itens, list):
-                            for item_c in itens:
-                                if item_c.get("vehicleId") == veiculo_id:
-                                    contract_item_id = item_c.get("contractItemId") or item_c.get("id")
-                                    break
-                            if not contract_item_id and itens:
-                                contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
+        # Se não foi pré-resolvido na chegada do checklist, descobre agora
+        if not contract_item_id:
+            # Estratégia 1: Busca o contrato ativo vinculado diretamente ao veículo
+            r_veic = requests.get(f"{API_URL}/vehicle?LicensePlate={placa_api}", headers=headers)
+            if r_veic.status_code == 200:
+                veiculos = r_veic.json().get("data", [])
+                if veiculos:
+                    contrato = veiculos[0].get("contract") or {}
+                    contrato_id = contrato.get("contractId")
+                    veiculo_id = veiculos[0].get("vehicleId")
+                    
+                    if contrato_id:
+                        r_items = requests.get(f"{API_URL}/contract/{contrato_id}/items", headers=headers)
+                        if r_items.status_code == 200:
+                            itens = r_items.json().get("data", r_items.json())
+                            if isinstance(itens, list):
+                                for item_c in itens:
+                                    if item_c.get("vehicleId") == veiculo_id:
+                                        contract_item_id = item_c.get("contractItemId") or item_c.get("id")
+                                        break
+                                if not contract_item_id and itens:
+                                    contract_item_id = itens[0].get("contractItemId") or itens[0].get("id")
 
         # Estratégia 2: Busca por itens de contrato ativos da placa (/contract-item/search)
         if not contract_item_id:

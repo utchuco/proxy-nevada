@@ -32,10 +32,27 @@
                 <div class="col" id="card_{{ item.id_aprovacao }}">
                     <div class="card card-checklist h-100">
                         <div class="card-header-custom d-flex justify-content-between align-items-center">
-                            <span class="fw-bold fs-6">Veículo: {{ item.placa }}</span>
+                            <div>
+                                <span class="fw-bold fs-6">Placa: {{ item.placa }}</span>
+                                {% if item.modelo_veiculo %}
+                                    <span class="ms-2 small text-white-50">• {{ item.montadora }} {{ item.modelo_veiculo }}</span>
+                                {% endif %}
+                            </div>
                             <span class="badge bg-light text-dark text-uppercase">{{ item.tipo_veiculo or 'Alugado' }}</span>
                         </div>
                         <div class="card-body p-3">
+                            {% if item.cliente_nome %}
+                            <div class="mb-3 p-2 bg-light rounded border">
+                                <div class="text-muted text-uppercase" style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                                <div class="fw-bold text-primary" style="font-size: 0.95rem;">
+                                    {{ item.cliente_nome }}
+                                    {% if item.contrato_id %}
+                                        <span class="text-secondary small fw-normal ms-1">(Contrato #{{ item.contrato_id }})</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+
                             <!-- Linha: Placa e KM -->
                             <div class="row g-2 mb-2">
                                 <div class="col-6">
