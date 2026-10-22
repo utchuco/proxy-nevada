@@ -93,11 +93,84 @@
             <span class="navbar-brand mb-0 h1 fs-6 fw-bold text-uppercase tracking-wider">
                 Locadora Nevada &bull; Gestão de Checklists
             </span>
-            <span class="badge bg-secondary text-white fw-semibold px-3 py-2" style="font-size: 0.75rem;">
-                Pendentes: {{ checklists|length }}
-            </span>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-1 shadow-sm px-3" data-bs-toggle="modal" data-bs-target="#modalUploadManual">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>Lançar Checklist Manual</span>
+                </button>
+                <span class="badge bg-secondary text-white fw-semibold px-3 py-2" style="font-size: 0.75rem;">
+                    Pendentes: {{ checklists|length }}
+                </span>
+            </div>
         </div>
     </nav>
+
+    <!-- Modal: Lançar Checklist Manual -->
+    <div class="modal fade" id="modalUploadManual" tabindex="-1" aria-labelledby="modalUploadManualLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow" style="border-radius: 12px; overflow: hidden;">
+                <div class="modal-header bg-dark text-white p-3">
+                    <h6 class="modal-title fw-bold" id="modalUploadManualLabel">
+                        Lançar Checklist Manualmente
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label">Arquivo PDF do Checklist:</label>
+                        <input type="file" id="manual_pdf" accept=".pdf" class="form-control" onchange="detectarDadosDoNomeArquivo(this)">
+                        <div class="form-text text-muted" style="font-size: 0.72rem;">
+                            Selecione o PDF digitalizado do checklist para anexar.
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Placa:</label>
+                            <input type="text" class="form-control text-uppercase fw-bold" id="manual_placa" placeholder="ABC1D23" oninput="validarPlacaModal()">
+                            <div id="manual_status_placa" class="mt-1" style="font-size: 0.72rem; font-weight: 600;"></div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">KM Atual:</label>
+                            <input type="number" class="form-control" id="manual_km" placeholder="ex: 20400">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Manutenção:</label>
+                        <select class="form-select" id="manual_tipo">
+                            <option value="PreventiveMaintenance">Manutenção Preventiva / Revisão</option>
+                            <option value="CorrectiveMaintenance" selected>Manutenção Corretiva</option>
+                            <option value="Claim">Sinistro</option>
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Solicitante:</label>
+                            <input type="text" class="form-control" id="manual_solic" value="Equipe Nevada">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Telefone (Solicitante):</label>
+                            <input type="text" class="form-control" id="manual_tel" value="11999999999">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descrição do Problema / Serviço:</label>
+                        <textarea class="form-control" id="manual_desc" rows="2" placeholder="Descreva os serviços ou avarias anotadas..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light p-3">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold px-3" id="btn_salvar_manual" onclick="enviarChecklistManual()">Adicionar ao Painel</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="container mb-5">
         {% if not checklists %}
@@ -492,6 +565,126 @@
                 alert("Erro ao conectar com o servidor.");
             }
         }
+
+        let debounceTimerModal = null;
+        function validarPlacaModal() {
+            const input = document.getElementById('manual_placa');
+            const status = document.getElementById('manual_status_placa');
+            const placa = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            input.value = placa;
+
+            if (placa.length < 7) {
+                input.style.borderColor = '#dc3545';
+                status.style.color = '#dc3545';
+                status.textContent = `⚠ ${placa.length}/7 caracteres`;
+                return;
+            }
+
+            status.style.color = '#6c757d';
+            status.textContent = 'Verificando...';
+
+            clearTimeout(debounceTimerModal);
+            debounceTimerModal = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/veiculo/${placa}/verificar`);
+                    const data = await res.json();
+                    if (data.isSuccess && data.existe) {
+                        input.style.borderColor = '#198754';
+                        status.style.color = '#198754';
+                        const desc = [data.montadora, data.modelo].filter(Boolean).join(' ');
+                        status.textContent = `✓ ${desc || 'Veículo localizado'} ${data.cliente ? '(' + data.cliente + ')' : '(Disponível)'}`;
+                    } else {
+                        input.style.borderColor = '#dc3545';
+                        status.style.color = '#dc3545';
+                        status.textContent = '⚠ Placa não cadastrada na frota!';
+                    }
+                } catch(e) {
+                    status.style.color = '#dc3545';
+                    status.textContent = 'Erro ao verificar placa';
+                }
+            }, 300);
+        }
+
+        function detectarDadosDoNomeArquivo(input) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            const nome = file.name;
+
+            // Se o arquivo tiver o padrão PLACA-DATA-TIPO (ex: UEX2G82-22.10.26-es.pdf)
+            const matchPlaca = nome.match(/^([A-Za-z0-9]{7})-/);
+            if (matchPlaca) {
+                const inputPlaca = document.getElementById('manual_placa');
+                inputPlaca.value = matchPlaca[1].toUpperCase();
+                validarPlacaModal();
+            }
+        }
+
+        async function enviarChecklistManual() {
+            const fileInput = document.getElementById('manual_pdf');
+            const placaInput = document.getElementById('manual_placa');
+            const kmInput = document.getElementById('manual_km');
+            const tipoInput = document.getElementById('manual_tipo');
+            const solicInput = document.getElementById('manual_solic');
+            const telInput = document.getElementById('manual_tel');
+            const descInput = document.getElementById('manual_desc');
+
+            const placa = placaInput.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            if (placa.length !== 7) {
+                alert("Digite uma placa válida com 7 caracteres!");
+                placaInput.focus();
+                return;
+            }
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Selecione o arquivo PDF do checklist!");
+                fileInput.focus();
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const btn = document.getElementById('btn_salvar_manual');
+            btn.disabled = true;
+            btn.innerText = "Enviando...";
+
+            const reader = new FileReader();
+            reader.onload = async function() {
+                try {
+                    const base64Data = reader.result.split(',')[1];
+                    const payload = {
+                        placa: placa,
+                        km_atual: kmInput.value || 0,
+                        motivo_id: tipoInput.value,
+                        solicitante: solicInput.value.trim() || 'Equipe Nevada',
+                        telefone: telInput.value.trim() || '11999999999',
+                        descricao: descInput.value.trim() || 'Checklist de veículo',
+                        pdf_base64: base64Data,
+                        pdf_nome: file.name
+                    };
+
+                    const res = await fetch('/api/receber-checklist', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const data = await res.json();
+                    if (data.isSuccess) {
+                        alert("Checklist adicionado ao painel com sucesso!");
+                        window.location.reload();
+                    } else {
+                        alert("Erro ao adicionar checklist: " + (data.erro || JSON.stringify(data)));
+                        btn.disabled = false;
+                        btn.innerText = "Adicionar ao Painel";
+                    }
+                } catch(err) {
+                    alert("Erro ao enviar: " + err);
+                    btn.disabled = false;
+                    btn.innerText = "Adicionar ao Painel";
+                }
+            };
+            reader.readAsDataURL(file);
+        }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
