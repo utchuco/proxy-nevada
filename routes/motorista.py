@@ -1,9 +1,11 @@
 import os
-from flask import Blueprint, render_template, request, send_file, Response
+from flask import Blueprint, render_template, request, send_file, Response, jsonify
 from extensions import limiter
 from services.bluefleet_service import (
     buscar_dados_veiculo_e_reserva,
-    buscar_checklist_pdf_bluefleet
+    buscar_checklist_pdf_bluefleet,
+    obter_ultimos_checklists,
+    baixar_arquivo_checklist_stream
 )
 from services.storage_service import buscar_crlv_path
 
@@ -31,6 +33,23 @@ def buscar_checklist(placa):
     if erro:
         status_code = 404 if "não encontrado" in erro.lower() else 500
         return erro, status_code
+
+    return Response(
+        pdf_conteudo,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={nome_arquivo}"}
+    )
+
+@motorista_bp.route("/api/veiculo/<placa>/checklists", methods=["GET"])
+def api_veiculo_checklists(placa):
+    checklists = obter_ultimos_checklists(placa, limite=3)
+    return jsonify({"isSuccess": True, "checklists": checklists})
+
+@motorista_bp.route("/checklist/ver/<int:req_id>/<file_id>")
+def ver_checklist_arquivo(req_id, file_id):
+    pdf_conteudo, nome_arquivo, erro = baixar_arquivo_checklist_stream(req_id, file_id)
+    if erro or not pdf_conteudo:
+        return erro or "Arquivo não encontrado.", 404
 
     return Response(
         pdf_conteudo,

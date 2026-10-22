@@ -308,3 +308,102 @@ body {
     background-color: var(--slate-50);
     color: var(--blue-600);
 }
+
+/* Central de Checklists (Drawer Mobile-First) */
+.checklist-drawer {
+    background-color: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+    text-align: left;
+    animation: drawerFadeIn 0.2s ease;
+}
+
+@keyframes drawerFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.checklist-drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--slate-200);
+}
+
+.checklist-drawer-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--slate-500);
+}
+
+.checklist-card-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #ffffff;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 8px;
+    min-height: 52px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.15s ease;
+}
+
+.checklist-card-item:last-child {
+    margin-bottom: 0;
+}
+
+.checklist-card-item:hover, .checklist-card-item:active {
+    border-color: var(--blue-600);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+    transform: translateY(-1px);
+}
+
+.checklist-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.checklist-item-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--navy-900);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.checklist-item-meta {
+    font-size: 0.75rem;
+    color: var(--slate-500);
+}
+
+.checklist-open-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--blue-600);
+    background-color: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.checklist-card-item:hover .checklist-open-pill {
+    background-color: var(--blue-600);
+    color: #ffffff;
+    border-color: var(--blue-600);
+}

@@ -249,6 +249,113 @@ def buscar_checklist_pdf_bluefleet(placa):
     except Exception as e:
         return None, None, f"Erro interno ao buscar checklist: {str(e)}"
 
+def obter_ultimos_checklists(placa, limite=3):
+    """Localiza os últimos 'limite' checklists oficiais de uma placa nas ocorrências."""
+    placa = placa.strip().upper()
+    placa_limpa = placa.replace("-", "").replace(" ", "")
+    placa_api = f"{placa_limpa[:3]}-{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa
+    placa_re = rf"{placa_limpa[:3]}-?{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa_limpa
+    padrao_checklist = rf"^{placa_re}-(\d{{2}})\.(\d{{2}})\.(\d{{2}})(?:-([A-Za-z0-9_]+))?"
+
+    checklists_encontrados = []
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        
+        r_oc = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers)
+        if r_oc.status_code != 200:
+            return []
+            
+        ocorrencias = r_oc.json().get("data", [])
+        if not ocorrencias:
+            return []
+            
+        ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+        
+        for oc in ocorrencias[:15]:
+            req_id = oc.get("contractItemRequestId")
+            if not req_id:
+                continue
+                
+            origem = oc.get("contractItemRequestReasonName") or "Manutenção"
+            r_files = get_blindado(f"{API_URL}/contract-item-request/{req_id}/files", headers, rapido=True)
+            if r_files.status_code == 200:
+                arquivos = r_files.json().get("data", r_files.json())
+                if isinstance(arquivos, list):
+                    for arq in arquivos:
+                        nome = str(arq.get("filename") or arq.get("fileName") or arq.get("name") or "").upper().strip()
+                        if not nome.endswith(".PDF"):
+                            continue
+                        # Padrão estrito da Nevada: PLACA-DD.MM.YY...
+                        m = re.search(padrao_checklist, nome)
+                        if m:
+                            file_id = arq.get("id") or arq.get("fileId")
+                            if any(c["file_id"] == file_id for c in checklists_encontrados):
+                                continue
+                            dia, mes, ano = m.group(1), m.group(2), m.group(3)
+                            sufixo = (m.group(4) or "").upper()
+                            if "E" in sufixo and "S" in sufixo:
+                                tipo = "Entrada e Saída"
+                            elif "S" in sufixo:
+                                tipo = "Saída"
+                            elif "E" in sufixo:
+                                tipo = "Entrada"
+                            else:
+                                tipo = "Vistoria"
+                                
+                            data_formatada = f"{dia}/{mes}/20{ano}"
+                            
+                            checklists_encontrados.append({
+                                "req_id": req_id,
+                                "file_id": file_id,
+                                "nome_arquivo": nome,
+                                "tipo": tipo,
+                                "data": data_formatada,
+                                "origem": origem
+                            })
+                            
+                            if len(checklists_encontrados) >= limite:
+                                break
+            if len(checklists_encontrados) >= limite:
+                break
+                
+        return checklists_encontrados
+    except Exception as e:
+        print(f"Erro ao listar checklists da placa {placa}: {e}")
+        return []
+
+def baixar_arquivo_checklist_stream(req_id, file_id):
+    """Baixa o arquivo em memória da Blue Fleet sem salvar nada em disco."""
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        
+        r_files = requests.get(f"{API_URL}/contract-item-request/{req_id}/files", headers=headers, timeout=10)
+        url_direta = None
+        nome_arquivo = f"Checklist_{req_id}_{file_id}.pdf"
+        
+        if r_files.status_code == 200:
+            arquivos = r_files.json().get("data", r_files.json())
+            if isinstance(arquivos, list):
+                for arq in arquivos:
+                    fid = str(arq.get("id") or arq.get("fileId"))
+                    if fid == str(file_id):
+                        url_direta = arq.get("url")
+                        nome_arquivo = arq.get("filename") or arq.get("fileName") or arq.get("name") or nome_arquivo
+                        break
+                        
+        if url_direta:
+            r_pdf = requests.get(url_direta, timeout=15)
+        else:
+            url_api = f"{API_URL}/contract-item-request/{req_id}/files/{file_id}"
+            r_pdf = requests.get(url_api, headers=headers, timeout=15)
+            
+        if r_pdf.status_code == 200:
+            return r_pdf.content, nome_arquivo, None
+        return None, None, "Arquivo não encontrado na Blue Fleet."
+    except Exception as e:
+        return None, None, f"Erro ao baixar arquivo: {e}"
+
 def enriquecer_dados_veiculo(placa_limpa):
     """Busca modelo, montadora, cliente, contrato e contractItemId da placa."""
     resultado = {

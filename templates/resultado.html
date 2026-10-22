@@ -98,7 +98,7 @@
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 8px;">
-                <button onclick="abrirChecklist('{{ titular.licensePlate }}', this)" class="btn-action-blue">
+                <button type="button" onclick="toggleCentralChecklists('{{ titular.licensePlate }}', this, 'gaveta_titular')" class="btn-action-blue" id="btn_checklists_titular">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
@@ -106,8 +106,14 @@
                         <line x1="16" y1="17" x2="8" y2="17"></line>
                         <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
-                    <span>Checklist do Titular</span>
+                    <span>Central de Checklists</span>
+                    <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: auto; transition: transform 0.2s ease;">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
                 </button>
+
+                <div id="gaveta_titular" class="checklist-drawer" style="display: none;"></div>
+
                 <button onclick="solicitarSenhaCrlv('{{ titular.licensePlate }}')" class="btn-secondary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -154,7 +160,7 @@
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 8px;">
-                <button onclick="abrirChecklist('{{ reserva.licensePlate }}', this)" style="background-color: #d97706;" class="btn-action-blue">
+                <button type="button" onclick="toggleCentralChecklists('{{ reserva.licensePlate }}', this, 'gaveta_reserva')" style="background-color: #d97706;" class="btn-action-blue" id="btn_checklists_reserva">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
@@ -162,8 +168,14 @@
                         <line x1="16" y1="17" x2="8" y2="17"></line>
                         <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
-                    <span>Checklist do Reserva</span>
+                    <span>Central de Checklists do Reserva</span>
+                    <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: auto; transition: transform 0.2s ease;">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
                 </button>
+
+                <div id="gaveta_reserva" class="checklist-drawer" style="display: none;"></div>
+
                 <button onclick="solicitarSenhaCrlv('{{ reserva.licensePlate }}')" class="btn-secondary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -187,6 +199,84 @@
     </div>
 
     <script>
+        function toggleCentralChecklists(placa, btnElement, gavetaId) {
+            var gaveta = document.getElementById(gavetaId);
+            var chevron = btnElement.querySelector('.chevron-icon');
+            
+            if (gaveta.style.display !== 'none') {
+                gaveta.style.display = 'none';
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+                return;
+            }
+
+            gaveta.style.display = 'block';
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+
+            if (gaveta.dataset.carregado === 'true') {
+                return;
+            }
+
+            gaveta.innerHTML = '<div style="padding: 16px; text-align: center; color: #64748b; font-size: 0.82rem; font-weight: 500;">Buscando vistorias oficiais recentes...</div>';
+
+            fetch('/api/veiculo/' + encodeURIComponent(placa) + '/checklists')
+                .then(function(res) {
+                    if (!res.ok) throw new Error('Falha na resposta do servidor');
+                    return res.json();
+                })
+                .then(function(dados) {
+                    gaveta.dataset.carregado = 'true';
+                    var listas = dados.checklists || [];
+                    if (listas.length === 0) {
+                        gaveta.innerHTML = 
+                            '<div style="padding: 14px 10px; text-align: center; font-size: 0.82rem; color: #64748b; line-height: 1.5;">' +
+                            'Nenhum checklist no padrão oficial localizado para esta placa nas ocorrências recentes.' +
+                            '<div style="margin-top: 10px;">' +
+                            '<a href="/checklist/' + encodeURIComponent(placa) + '" target="_blank" style="font-weight: 700; color: #2563eb; text-decoration: none; font-size: 0.82rem;">Tentar busca direta &rarr;</a>' +
+                            '</div>' +
+                            '</div>';
+                        return;
+                    }
+
+                    var html = '<div class="checklist-drawer-header">' +
+                        '<span class="checklist-drawer-title">Últimas Vistorias Oficiais</span>' +
+                        '<span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;">' + listas.length + ' de 3</span>' +
+                        '</div>';
+
+                    listas.forEach(function(item) {
+                        html += '<a href="/checklist/ver/' + item.req_id + '/' + encodeURIComponent(item.file_id) + '" target="_blank" class="checklist-card-item">' +
+                            '<div class="checklist-card-info">' +
+                            '<div class="checklist-item-title">' +
+                            '<span>' + item.tipo + ' &bull; ' + item.data + '</span>' +
+                            '</div>' +
+                            '<div class="checklist-item-meta">' +
+                            '<span>Motivo: ' + item.origem + '</span>' +
+                            ' &bull; <span>Ocorrência #' + item.req_id + '</span>' +
+                            '</div>' +
+                            '</div>' +
+                            '<span class="checklist-open-pill">' +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                            '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>' +
+                            '<polyline points="15 3 21 3 21 9"></polyline>' +
+                            '<line x1="10" y1="14" x2="21" y2="3"></line>' +
+                            '</svg>' +
+                            '<span>Abrir</span>' +
+                            '</span>' +
+                            '</a>';
+                    });
+
+                    gaveta.innerHTML = html;
+                })
+                .catch(function(err) {
+                    gaveta.innerHTML = 
+                        '<div style="padding: 14px 10px; text-align: center; font-size: 0.82rem; color: #dc2626;">' +
+                        'Não foi possível carregar a lista de checklists no momento.' +
+                        '<div style="margin-top: 8px;">' +
+                        '<a href="/checklist/' + encodeURIComponent(placa) + '" target="_blank" style="font-weight: 700; color: #2563eb; text-decoration: none;">Abrir vistoria diretamente &rarr;</a>' +
+                        '</div>' +
+                        '</div>';
+                });
+        }
+
         function solicitarSenhaCrlv(placaSelecionada) {
             var senha = prompt("Acesso Restrito\nDigite a senha para acessar o documento do veículo " + placaSelecionada + ":");
             if (senha) {
