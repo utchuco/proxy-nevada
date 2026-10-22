@@ -27,6 +27,11 @@
     padding: 0;
 }
 
+html, body {
+    overflow-x: hidden;
+    width: 100%;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background-color: var(--bg-page);
@@ -35,7 +40,7 @@ body {
     justify-content: center;
     align-items: flex-start;
     min-height: 100vh;
-    padding: 32px 16px;
+    padding: 24px 12px;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -43,15 +48,16 @@ body {
     width: 100%;
     max-width: 520px;
     margin: 0 auto;
+    min-width: 0;
 }
 
 .brand-header {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 }
 
 .brand-logo {
-    width: 130px;
+    width: 120px;
     height: auto;
     display: inline-block;
     margin-bottom: 8px;
@@ -59,15 +65,16 @@ body {
 
 .brand-badge {
     display: inline-block;
-    font-size: 0.72rem;
+    font-size: 0.70rem;
     font-weight: 700;
-    letter-spacing: 1.2px;
+    letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--slate-500);
     background-color: var(--slate-100);
     padding: 4px 10px;
     border-radius: 9999px;
     border: 1px solid var(--slate-200);
+    white-space: nowrap;
 }
 
 .card-container {
@@ -75,8 +82,12 @@ body {
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    padding: 24px;
-    margin-bottom: 20px;
+    padding: 18px 14px;
+    margin-bottom: 16px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    word-break: break-word;
 }
 
 /* Placa Input Styling */
@@ -132,11 +143,11 @@ body {
 
 .btn-secondary {
     width: 100%;
-    padding: 12px 16px;
+    padding: 12px 14px;
     background-color: var(--slate-100);
     color: var(--slate-700);
     border: 1px solid var(--slate-200);
-    font-size: 0.9rem;
+    font-size: 0.86rem;
     font-weight: 600;
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -144,7 +155,11 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    min-height: 48px;
+    box-sizing: border-box;
     transition: all 0.2s ease;
+    text-align: center;
+    word-break: break-word;
 }
 
 .btn-secondary:hover {
@@ -156,8 +171,8 @@ body {
     background-color: var(--blue-600);
     color: #ffffff;
     border: none;
-    padding: 12px 16px;
-    font-size: 0.9rem;
+    padding: 12px 14px;
+    font-size: 0.86rem;
     font-weight: 600;
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -165,58 +180,135 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    min-height: 48px;
+    width: 100%;
+    box-sizing: border-box;
     transition: all 0.2s ease;
+    text-align: center;
+    word-break: break-word;
 }
 
 .btn-action-blue:hover {
     background-color: var(--blue-700);
 }
 
+.btn-action-blue svg, .btn-secondary svg, .btn-primary svg {
+    flex-shrink: 0;
+}
+
+.btn-action-text {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+/* Header Flex do Card */
+.card-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* Subtítulo do Veículo (Montadora + Modelo) */
+.vehicle-model-title {
+    font-size: 0.90rem;
+    font-weight: 600;
+    color: var(--slate-700);
+    margin-bottom: 14px;
+    line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
 /* Ficha Técnica / Spec Grid */
 .spec-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin: 16px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 14px 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .spec-item {
     background-color: var(--slate-50);
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-sm);
-    padding: 10px 12px;
+    padding: 8px 10px;
     text-align: left;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .spec-label {
     display: block;
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 700;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     text-transform: uppercase;
     color: var(--slate-400);
     margin-bottom: 2px;
-}
-
-.spec-value {
-    display: block;
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: var(--navy-900);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.spec-value {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--navy-900);
+    line-height: 1.3;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Caixa de Dados da Locação */
+.locacao-box {
+    background-color: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.locacao-value {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--navy-800);
+    display: block;
+    margin-top: 2px;
+    line-height: 1.35;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
 /* Pills de Status */
 .status-pill {
-    display: inline-block;
-    padding: 3px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
     border-radius: 9999px;
-    font-size: 0.72rem;
+    font-size: 0.70rem;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    flex-shrink: 0;
+    white-space: nowrap;
+    max-width: 48%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .status-pill-green {
@@ -314,11 +406,14 @@ body {
     background-color: var(--slate-50);
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-md);
-    padding: 12px;
-    margin-top: 10px;
+    padding: 10px;
+    margin-top: 8px;
     margin-bottom: 8px;
     text-align: left;
     animation: drawerFadeIn 0.2s ease;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 @keyframes drawerFadeIn {
@@ -330,17 +425,21 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--slate-200);
+    min-width: 0;
 }
 
 .checklist-drawer-title {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     text-transform: uppercase;
     color: var(--slate-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .checklist-card-item {
@@ -350,12 +449,16 @@ body {
     background-color: #ffffff;
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-sm);
-    padding: 12px;
+    padding: 10px 10px;
     margin-bottom: 8px;
-    min-height: 52px;
+    min-height: 50px;
     text-decoration: none;
     color: inherit;
     transition: all 0.15s ease;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+    min-width: 0;
 }
 
 .checklist-card-item:last-child {
@@ -371,28 +474,35 @@ body {
 .checklist-card-info {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .checklist-item-title {
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     font-weight: 700;
     color: var(--navy-900);
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    line-height: 1.25;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .checklist-item-meta {
-    font-size: 0.75rem;
+    font-size: 0.70rem;
     color: var(--slate-500);
+    line-height: 1.3;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .checklist-open-pill {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     color: var(--blue-600);
     background-color: var(--slate-50);
@@ -400,10 +510,79 @@ body {
     padding: 6px 10px;
     border-radius: 6px;
     white-space: nowrap;
+    flex-shrink: 0;
+    height: 32px;
 }
 
 .checklist-card-item:hover .checklist-open-pill {
     background-color: var(--blue-600);
     color: #ffffff;
     border-color: var(--blue-600);
+}
+
+/* Responsividade Mobile Refinada */
+@media (max-width: 480px) {
+    body {
+        padding: 16px 10px;
+    }
+    
+    .card-container {
+        padding: 16px 12px;
+    }
+
+    .input-placa {
+        font-size: 1.3rem;
+        padding: 14px 16px;
+    }
+
+    .spec-grid {
+        gap: 6px;
+        margin: 12px 0;
+    }
+
+    .spec-item {
+        padding: 6px 8px;
+    }
+
+    .spec-value {
+        font-size: 0.78rem;
+    }
+
+    .locacao-box {
+        padding: 8px 10px;
+        margin-bottom: 14px;
+    }
+
+    .locacao-value {
+        font-size: 0.80rem;
+    }
+
+    .btn-action-blue, .btn-secondary, .btn-primary {
+        font-size: 0.82rem;
+        padding: 10px 10px;
+        min-height: 46px;
+    }
+
+    .checklist-drawer {
+        padding: 8px;
+    }
+
+    .checklist-card-item {
+        padding: 8px 8px;
+        gap: 6px;
+    }
+
+    .checklist-item-title {
+        font-size: 0.78rem;
+    }
+
+    .checklist-item-meta {
+        font-size: 0.68rem;
+    }
+
+    .checklist-open-pill {
+        padding: 4px 8px;
+        font-size: 0.70rem;
+        height: 28px;
+    }
 }
