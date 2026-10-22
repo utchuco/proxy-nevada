@@ -21,11 +21,17 @@ def buscar():
     if not placa:
         return render_template("index.html", erro="Por favor, digite uma placa válida.")
 
-    carro_titular, carro_reserva, aviso_reserva, erro = buscar_dados_veiculo_e_reserva(placa)
+    carro_titular, carro_reserva, aviso_reserva, politicas_frota, erro = buscar_dados_veiculo_e_reserva(placa)
     if erro:
         return render_template("index.html", erro=erro)
 
-    return render_template("resultado.html", titular=carro_titular, reserva=carro_reserva, aviso_reserva=aviso_reserva)
+    return render_template(
+        "resultado.html",
+        titular=carro_titular,
+        reserva=carro_reserva,
+        aviso_reserva=aviso_reserva,
+        politicas=politicas_frota
+    )
 
 @motorista_bp.route("/checklist/<placa>")
 def buscar_checklist(placa):

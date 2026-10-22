@@ -63,12 +63,12 @@ def buscar_dados_veiculo_e_reserva(placa):
         response = get_blindado(url_busca, headers)
         
         if response.status_code == 429:
-            return None, None, False, "A Blue Fleet limitou nossas buscas por excesso de requisições. Aguarde 1 minuto e tente novamente."
+            return None, None, False, [], "A Blue Fleet limitou nossas buscas por excesso de requisições. Aguarde 1 minuto e tente novamente."
             
         response.raise_for_status()
         lista_veiculos = response.json().get("data", [])
         if not lista_veiculos:
-            return None, None, False, f"Veículo não encontrado para a placa {placa}."
+            return None, None, False, [], f"Veículo não encontrado para a placa {placa}."
 
         veiculo_base = lista_veiculos[0]
         carro_titular = None
@@ -190,12 +190,27 @@ def buscar_dados_veiculo_e_reserva(placa):
                 except Exception:
                     pass
 
-        return carro_titular, carro_reserva, reserva_oculta_detectada, None
+        # Busca avisos e políticas de frota vinculados ao contrato
+        contract_id = None
+        model_id = None
+        if carro_titular:
+            contract_id = (carro_titular.get("contract") or {}).get("contractId") or carro_titular.get("contractId")
+            model_id = carro_titular.get("vehicleModelId")
+        if not contract_id and carro_reserva:
+            contract_id = (carro_reserva.get("contract") or {}).get("contractId") or carro_reserva.get("contractId")
+            model_id = carro_reserva.get("vehicleModelId")
+        if not contract_id and veiculo_base:
+            contract_id = (veiculo_base.get("contract") or {}).get("contractId") or veiculo_base.get("contractId")
+            model_id = veiculo_base.get("vehicleModelId")
+
+        politicas_frota = buscar_politicas_contrato(contract_id, model_id) if contract_id else []
+
+        return carro_titular, carro_reserva, reserva_oculta_detectada, politicas_frota, None
 
     except requests.exceptions.HTTPError as err_http:
-        return None, None, False, f"Falha na comunicação com a API: {err_http}"
+        return None, None, False, [], f"Falha na comunicação com a API: {err_http}"
     except Exception as e:
-        return None, None, False, f"Erro interno do sistema: {str(e)}"
+        return None, None, False, [], f"Erro interno do sistema: {str(e)}"
 
 def buscar_checklist_pdf_bluefleet(placa):
     """Busca o PDF de checklist arquivado na Blue Fleet para a placa informada."""
@@ -355,6 +370,83 @@ def baixar_arquivo_checklist_stream(req_id, file_id):
         return None, None, "Arquivo não encontrado na Blue Fleet."
     except Exception as e:
         return None, None, f"Erro ao baixar arquivo: {e}"
+
+def buscar_politicas_contrato(contract_id, vehicle_model_id=None):
+    """Busca as políticas/avisos cadastrados no contrato (ex: sem direito a manutenção/reserva)."""
+    if not contract_id:
+        return []
+        
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        
+        r = get_blindado(f"{API_URL}/commercial/contract/{contract_id}", headers, rapido=True)
+        if r.status_code != 200:
+            return []
+            
+        cdata = r.json().get("data", {})
+        politicas_brutas = []
+        
+        # 1. Políticas genéricas do contrato
+        if cdata.get("genericPolicies"):
+            politicas_brutas.extend(cdata.get("genericPolicies"))
+            
+        # 2. Políticas específicas dos veículos do contrato
+        veiculos_contrato = cdata.get("vehicles", [])
+        if vehicle_model_id:
+            for v in veiculos_contrato:
+                if v.get("vehicleModelId") == vehicle_model_id:
+                    politicas_brutas.extend(v.get("policies") or [])
+                    
+        # Se não achou por modelo específico, traz de todos os veículos
+        if not politicas_brutas:
+            for v in veiculos_contrato:
+                politicas_brutas.extend(v.get("policies") or [])
+
+        secoes_trad = {
+            "general": "Geral",
+            "maintenance": "Manutenção",
+            "claim": "Sinistro",
+            "tire": "Pneus",
+            "trafficticket": "Multas",
+            "replacement": "Carro Reserva"
+        }
+        
+        tipos_trad = {
+            "important": "Importante",
+            "warning": "Atenção",
+            "information": "Informativo"
+        }
+
+        politicas_formatadas = []
+        descricoes_vistas = set()
+
+        for p in politicas_brutas:
+            if not isinstance(p, dict):
+                continue
+            desc = (p.get("description") or "").strip()
+            if not desc or desc in descricoes_vistas:
+                continue
+                
+            descricoes_vistas.add(desc)
+            
+            sec_raw = str(p.get("policySection", "General")).lower()
+            tipo_raw = str(p.get("policyType", "Important")).lower()
+            
+            secao = secoes_trad.get(sec_raw, p.get("policySection") or "Geral")
+            tipo = tipos_trad.get(tipo_raw, p.get("policyType") or "Importante")
+            
+            politicas_formatadas.append({
+                "secao": secao,
+                "tipo": tipo,
+                "descricao": desc,
+                "showPopup": p.get("showPopup", True)
+            })
+
+        return politicas_formatadas
+    except Exception as e:
+        print(f"Erro ao buscar políticas do contrato {contract_id}: {e}")
+        return []
 
 def enriquecer_dados_veiculo(placa_limpa):
     """Busca modelo, montadora, cliente, contrato e contractItemId da placa."""

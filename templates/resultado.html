@@ -50,6 +50,28 @@
         </div>
         {% endif %}
 
+        <!-- AVISO DE POLÍTICA DE FROTA / MANUTENÇÃO (CONTRATOS ESPECIAIS) -->
+        {% if politicas %}
+        <div class="alert-card alert-policy">
+            <div class="alert-title" style="color: #991b1b;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Aviso: Política de Frota</span>
+            </div>
+            <div class="policy-list">
+                {% for pol in politicas %}
+                <div class="policy-item">
+                    <span class="policy-section-tag">{{ pol.secao }} &bull; {{ pol.tipo }}</span>
+                    <span class="policy-desc">{{ pol.descricao }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- BLOCO TITULAR -->
         {% if titular %}
         <div class="card-container">

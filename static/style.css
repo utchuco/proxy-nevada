@@ -362,6 +362,50 @@ body {
     line-height: 1.4;
 }
 
+/* Balão de Aviso de Política de Frota (Sem Emojis) */
+.alert-policy {
+    background-color: #fff1f2;
+    border: 1px solid #fecdd3;
+    border-left: 4px solid #e11d48;
+    margin-bottom: 16px;
+}
+
+.policy-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.policy-item {
+    background-color: #ffffff;
+    border: 1px solid #ffe4e6;
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.policy-section-tag {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #e11d48;
+    margin-bottom: 2px;
+}
+
+.policy-desc {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #881337;
+    line-height: 1.35;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
 /* Autocomplete */
 .suggestions-list {
     position: absolute;
