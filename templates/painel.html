@@ -117,22 +117,27 @@
                                     {% if item.modelo_veiculo %}&bull; {{ item.montadora }} {{ item.modelo_veiculo }}{% endif %}
                                 </span>
                             </div>
-                            <span class="badge bg-light text-dark text-uppercase px-2 py-1" style="font-size: 0.7rem; font-weight: 700;">
-                                {{ item.tipo_veiculo or 'Alugado' }}
+                            <span class="badge {% if item.cliente_nome %}bg-light text-dark{% else %}bg-success text-white{% endif %} text-uppercase px-2 py-1" id="badge_tipo_{{ item.id_aprovacao }}" style="font-size: 0.7rem; font-weight: 700;">
+                                {% if item.cliente_nome %}Alugado{% else %}Disponível{% endif %}
                             </span>
                         </div>
                         <div class="card-body p-3">
-                            {% if item.cliente_nome %}
-                            <div class="mb-3 client-box">
-                                <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
-                                <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
-                                    {{ item.cliente_nome }}
-                                    {% if item.contrato_id %}
-                                        <span class="text-muted small fw-normal ms-1">(Contrato #{{ item.contrato_id }})</span>
-                                    {% endif %}
-                                </div>
+                            <div class="mb-3 client-box" id="box_cliente_{{ item.id_aprovacao }}">
+                                {% if item.cliente_nome %}
+                                    <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                                    <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
+                                        {{ item.cliente_nome }}
+                                        {% if item.contrato_id %}
+                                            <span class="text-muted small fw-normal ms-1">(Contrato #{{ item.contrato_id }})</span>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Situação do Veículo</div>
+                                    <div class="fw-bold text-success mt-1" style="font-size: 0.9rem;">
+                                        Disponível
+                                    </div>
+                                {% endif %}
                             </div>
-                            {% endif %}
 
                             <!-- Linha: Placa e KM -->
                             <div class="row g-2 mb-2">
@@ -186,8 +191,9 @@
                             <div class="mb-2">
                                 <label class="form-label">Serviço de Leva e Traz:</label>
                                 <select class="form-select" id="leva_traz_{{ item.id_aprovacao }}">
-                                    <option value="false" {% if not item.leva_e_traz %}selected{% endif %}>Não</option>
-                                    <option value="true" {% if item.leva_e_traz %}selected{% endif %}>Sim</option>
+                                    <option value="" {% if not item.leva_e_traz %}selected{% endif %}>Vazio / Não informado</option>
+                                    <option value="false">Não</option>
+                                    <option value="true">Sim</option>
                                 </select>
                             </div>
 
@@ -352,6 +358,35 @@
                         if (headerModelo) {
                             headerModelo.textContent = desc ? `• ${desc}` : '';
                         }
+                        const badge = document.getElementById('badge_tipo_' + id);
+                        const boxCliente = document.getElementById('box_cliente_' + id);
+                        if (data.cliente) {
+                            if (badge) {
+                                badge.className = 'badge bg-light text-dark text-uppercase px-2 py-1';
+                                badge.textContent = 'Alugado';
+                            }
+                            if (boxCliente) {
+                                boxCliente.innerHTML = `
+                                    <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                                    <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
+                                        ${data.cliente} ${data.contrato_id ? '<span class="text-muted small fw-normal ms-1">(Contrato #' + data.contrato_id + ')</span>' : ''}
+                                    </div>
+                                `;
+                            }
+                        } else {
+                            if (badge) {
+                                badge.className = 'badge bg-success text-white text-uppercase px-2 py-1';
+                                badge.textContent = 'Disponível';
+                            }
+                            if (boxCliente) {
+                                boxCliente.innerHTML = `
+                                    <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Situação do Veículo</div>
+                                    <div class="fw-bold text-success mt-1" style="font-size: 0.9rem;">
+                                        Disponível
+                                    </div>
+                                `;
+                            }
+                        }
                     } else {
                         input.style.borderColor = '#dc3545';
                         input.style.backgroundColor = '#fff5f5';
@@ -405,7 +440,7 @@
                 motivo_classe: document.getElementById('classe_' + id).value,
                 solicitante: document.getElementById('solic_' + id).value.trim(),
                 telefone: document.getElementById('tel_' + id).value.trim(),
-                leva_e_traz: document.getElementById('leva_traz_' + id).value === 'true'
+                leva_e_traz: document.getElementById('leva_traz_' + id).value
             };
 
             const btnAprovar = document.querySelector('#card_' + id + ' .btn-approve');

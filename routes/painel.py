@@ -134,15 +134,29 @@ def painel_aprovar(id_aprovacao):
             "scheduling1": data_iso
         }
 
-        # Anexa PDF do checklist se existir fisicamente
+        # Anexa PDF do checklist se existir fisicamente, garantindo padrão estrito PLACA-DD.MM.YY-TIPO.pdf
         files_payload = []
         caminho_pdf = checklist_alvo.get("caminho_pdf")
         if caminho_pdf and os.path.exists(caminho_pdf):
             try:
+                # Extrai formato DD.MM.AA a partir da data informada/editada
+                try:
+                    dt_parts = data_iso[:10].split("-")
+                    data_formatada_pdf = f"{dt_parts[2]}.{dt_parts[1]}.{dt_parts[0][2:]}"
+                except Exception:
+                    data_formatada_pdf = datetime.now().strftime("%d.%m.%y")
+
+                # Detecta o tipo (e, s ou es) a partir do nome original
+                nome_original = str(checklist_alvo.get("pdf_nome") or "")
+                match_tipo = re.search(r'-(es|e|s)(?:\.pdf)?$', nome_original, re.IGNORECASE)
+                sufixo_tipo = match_tipo.group(1).lower() if match_tipo else "e"
+
+                nome_arquivo_final = f"{placa_limpa}-{data_formatada_pdf}-{sufixo_tipo}.pdf"
+
                 with open(caminho_pdf, "rb") as f_pdf:
                     b64_pdf = base64.b64encode(f_pdf.read()).decode()
                 files_payload.append({
-                    "fileName": checklist_alvo.get("pdf_nome") or f"Checklist_{placa_api}.pdf",
+                    "fileName": nome_arquivo_final,
                     "base64Contents": b64_pdf,
                     "fileType": "UnidentifiedDocument"
                 })
@@ -158,7 +172,14 @@ def painel_aprovar(id_aprovacao):
 
         if tipo_veiculo == "alugado":
             payload_bluefleet["updateContractItemDriver"] = False
-            payload_bluefleet["hasPickUpReturnService"] = edicoes.get("leva_e_traz", checklist_alvo.get("leva_e_traz", False))
+
+        # Leva e Traz: apenas inclui no payload se o usuário selecionou explicitamente Sim ou Não
+        leva_traz_opcao = edicoes.get("leva_e_traz")
+        if leva_traz_opcao in ["true", True]:
+            payload_bluefleet["hasPickUpReturnService"] = True
+        elif leva_traz_opcao in ["false", False]:
+            payload_bluefleet["hasPickUpReturnService"] = False
+        # Se for vazio ("") ou None, não envia o campo (comportamento padrão Blue Fleet)
 
         if is_revisao:
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
