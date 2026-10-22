@@ -205,6 +205,18 @@ def buscar_dados_veiculo_e_reserva(placa):
 
         politicas_frota = buscar_politicas_contrato(contract_id, model_id) if contract_id else []
 
+        # Busca última revisão por quilometragem / tempo para o titular e reserva
+        if carro_titular:
+            placa_t = carro_titular.get("licensePlate") or placa
+            oc_t = ocorrencias if ('ocorrencias' in locals() and ocorrencias and placa_t.replace("-", "") == placa_limpa_base) else None
+            carro_titular["revisao"] = obter_ultima_revisao(placa_t, oc_t) or "Não informada"
+
+        if carro_reserva:
+            placa_r = carro_reserva.get("licensePlate")
+            if placa_r:
+                oc_r = ocorrencias if ('ocorrencias' in locals() and ocorrencias and placa_r.replace("-", "") == placa_limpa_base) else None
+                carro_reserva["revisao"] = obter_ultima_revisao(placa_r, oc_r) or "Não informada"
+
         return carro_titular, carro_reserva, reserva_oculta_detectada, politicas_frota, None
 
     except requests.exceptions.HTTPError as err_http:
@@ -447,6 +459,69 @@ def buscar_politicas_contrato(contract_id, vehicle_model_id=None):
     except Exception as e:
         print(f"Erro ao buscar políticas do contrato {contract_id}: {e}")
         return []
+
+def obter_ultima_revisao(placa, ocorrencias=None):
+    """Localiza a última ocorrência de revisão por quilometragem / tempo e retorna o KM formatado."""
+    placa = placa.strip().upper()
+    placa_limpa = placa.replace("-", "").replace(" ", "")
+    placa_api = f"{placa_limpa[:3]}-{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa
+
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+        if ocorrencias is None:
+            r_oc = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_api}", headers, rapido=True)
+            if r_oc.status_code == 200:
+                ocorrencias = r_oc.json().get("data", [])
+            else:
+                ocorrencias = []
+
+        if not ocorrencias:
+            return None
+
+        ocorrencias_ordenadas = sorted(ocorrencias, key=lambda x: x.get("createdAt", ""), reverse=True)
+
+        for oc in ocorrencias_ordenadas:
+            cid = oc.get("contractItemRequestReasonClassId")
+            rid = oc.get("contractItemRequestReasonId")
+            rname = str(oc.get("contractItemRequestReasonName") or "").lower()
+
+            # ClassId 1 = Revisão por Quilometragem, rid == 1 = Manutenção Preventiva, ou menção a revisão
+            if cid in [1, 2] or rid == 1 or "revis" in rname:
+                req_id = oc.get("contractItemRequestId")
+                if not req_id:
+                    continue
+
+                r_det = get_blindado(f"{API_URL}/contract-item-request/{req_id}", headers, rapido=True)
+                if r_det.status_code == 200:
+                    det = r_det.json().get("data", {})
+                    cname = str(det.get("contractItemRequestReasonClassName") or "").lower()
+                    maint = det.get("maintenance") or {}
+                    desc = str(maint.get("description") or "").lower()
+
+                    is_revisao = (
+                        det.get("contractItemRequestReasonClassId") in [1, 2] or
+                        "revis" in cname or
+                        "tempo" in cname or
+                        "quilometragem" in cname or
+                        "revis" in desc
+                    )
+
+                    if is_revisao:
+                        km = det.get("currentOdometer") or maint.get("currentOdometer")
+                        if km:
+                            try:
+                                km_limpo = re.sub(r"[^\d]", "", str(km))
+                                km_num = int(km_limpo)
+                                return f"{km_num:,}".replace(",", ".") + " km"
+                            except Exception:
+                                return f"{km} km"
+
+        return None
+    except Exception as e:
+        print(f"Erro ao obter última revisão para placa {placa}: {e}")
+        return None
 
 def enriquecer_dados_veiculo(placa_limpa):
     """Busca modelo, montadora, cliente, contrato e contractItemId da placa."""

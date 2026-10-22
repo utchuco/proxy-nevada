@@ -80,7 +80,7 @@
                     <span style="font-size: 0.70rem; font-weight: 700; color: #64748b; letter-spacing: 0.5px; text-transform: uppercase; display: block;">Veículo Titular</span>
                     <h2 style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-top: 2px; word-break: break-word;">{{ titular.licensePlate }}</h2>
                 </div>
-                <span class="status-pill status-pill-green">{{ titular.vehicleStatusName or 'Locado' }}</span>
+                <span class="status-pill {% if 'dispon' in (titular.vehicleStatusName or '')|lower %}status-pill-blue{% else %}status-pill-green{% endif %}">{{ titular.vehicleStatusName or 'Locado' }}</span>
             </div>
 
             <div class="vehicle-model-title">
@@ -102,8 +102,8 @@
                     <span class="spec-value">{{ titular.vehicleColor or 'Não informado' }}</span>
                 </div>
                 <div class="spec-item">
-                    <span class="spec-label">Último Odômetro</span>
-                    <span class="spec-value">{{ titular.informedOdometer }} km</span>
+                    <span class="spec-label">Última Revisão</span>
+                    <span class="spec-value">{{ titular.revisao or 'Não informada' }}</span>
                 </div>
             </div>
 
@@ -111,7 +111,9 @@
             <div class="locacao-box">
                 <span class="spec-label">Cliente / Locação</span>
                 <span class="locacao-value">
-                    {% if titular.contract and titular.contract.customer %}
+                    {% if 'dispon' in (titular.vehicleStatusName or '')|lower %}
+                        Disponível
+                    {% elif titular.contract and titular.contract.customer %}
                         {{ titular.contract.customer.tradingName }}
                     {% else %}
                         Locação Corporativa Ativa
@@ -176,8 +178,8 @@
                     <span class="spec-value">{{ reserva.vehicleColor or 'Não informado' }}</span>
                 </div>
                 <div class="spec-item" style="background-color: #ffffff;">
-                    <span class="spec-label">Último Odômetro</span>
-                    <span class="spec-value">{{ reserva.informedOdometer }} km</span>
+                    <span class="spec-label">Última Revisão</span>
+                    <span class="spec-value">{{ reserva.revisao or 'Não informada' }}</span>
                 </div>
             </div>
 
