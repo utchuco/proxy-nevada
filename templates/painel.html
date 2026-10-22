@@ -122,8 +122,9 @@
                     <div class="mb-3">
                         <label class="form-label">Arquivo PDF do Checklist:</label>
                         <input type="file" id="manual_pdf" accept=".pdf" class="form-control" onchange="detectarDadosDoNomeArquivo(this)">
+                        <div id="status_ocr_modal" class="mt-2" style="font-size: 0.78rem;"></div>
                         <div class="form-text text-muted" style="font-size: 0.72rem;">
-                            Selecione o PDF digitalizado do checklist para anexar.
+                            Selecione o PDF: a IA decifrará a caligrafia e preencherá os campos automaticamente.
                         </div>
                     </div>
 
@@ -609,14 +610,69 @@
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
             const nome = file.name;
+            const statusOcr = document.getElementById('status_ocr_modal');
 
-            // Se o arquivo tiver o padrão PLACA-DATA-TIPO (ex: UEX2G82-22.10.26-es.pdf)
+            // 1. Tenta preencher a placa instantaneamente pelo nome do arquivo se já tiver o padrão
             const matchPlaca = nome.match(/^([A-Za-z0-9]{7})-/);
             if (matchPlaca) {
                 const inputPlaca = document.getElementById('manual_placa');
                 inputPlaca.value = matchPlaca[1].toUpperCase();
                 validarPlacaModal();
             }
+
+            // 2. Envia para a IA do Gemini extrair o manuscrito completo (KM, Solicitante, Fone, Avarias)
+            if (statusOcr) {
+                statusOcr.innerHTML = '<span class="text-primary fw-bold"><span class="spinner-border spinner-border-sm me-1"></span> Lendo caligrafia com a IA do Gemini...</span>';
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function() {
+                try {
+                    const base64Data = reader.result.split(',')[1];
+                    const res = await fetch('/painel-nevada/ocr-pdf', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pdf_base64: base64Data })
+                    });
+                    const resp = await res.json();
+                    if (resp.isSuccess && resp.dados) {
+                        const d = resp.dados;
+                        if (d.placa) {
+                            document.getElementById('manual_placa').value = d.placa.toUpperCase().trim();
+                            validarPlacaModal();
+                        }
+                        if (d.km_atual) {
+                            document.getElementById('manual_km').value = d.km_atual;
+                        }
+                        if (d.nome_solicitante) {
+                            document.getElementById('manual_solic').value = d.nome_solicitante;
+                        }
+                        if (d.telefone_solicitante) {
+                            document.getElementById('manual_tel').value = d.telefone_solicitante;
+                        }
+                        let descFinal = d.avarias_observacoes || '';
+                        if (d.combustivel) {
+                            descFinal += (descFinal ? ' | ' : '') + 'Combustível: ' + d.combustivel;
+                        }
+                        if (descFinal) {
+                            document.getElementById('manual_desc').value = descFinal;
+                        }
+
+                        if (statusOcr) {
+                            statusOcr.innerHTML = '<span class="text-success fw-bold">✓ Caligrafia decifrada e campos preenchidos pela IA!</span>';
+                        }
+                    } else {
+                        if (statusOcr) {
+                            statusOcr.innerHTML = '<span class="text-muted">Aviso: Não foi possível ler automaticamente. Você pode preencher manualmente.</span>';
+                        }
+                    }
+                } catch(e) {
+                    if (statusOcr) {
+                        statusOcr.innerHTML = '<span class="text-muted">Preencha os campos manualmente se desejar.</span>';
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
         }
 
         async function enviarChecklistManual() {

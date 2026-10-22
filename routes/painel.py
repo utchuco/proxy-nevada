@@ -12,6 +12,7 @@ from services.bluefleet_service import (
     resolver_contract_item_id,
     criar_ocorrencia_e_avancar_fila
 )
+from services.ocr_service import extrair_dados_checklist_pdf
 
 painel_bp = Blueprint("painel", __name__)
 
@@ -29,6 +30,23 @@ def painel_nevada():
             item["data_agendamento_local"] = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
 
     return render_template("painel.html", checklists=pendentes)
+
+@painel_bp.route("/painel-nevada/ocr-pdf", methods=["POST"])
+def painel_ocr_pdf():
+    dados = request.get_json(silent=True) or {}
+    pdf_base64 = dados.get("pdf_base64")
+    if not pdf_base64:
+        return jsonify({"isSuccess": False, "erro": "Arquivo PDF ausente."}), 400
+
+    try:
+        pdf_bytes = base64.b64decode(pdf_base64)
+        dados_extraidos = extrair_dados_checklist_pdf(pdf_bytes)
+        if dados_extraidos:
+            return jsonify({"isSuccess": True, "dados": dados_extraidos}), 200
+        else:
+            return jsonify({"isSuccess": False, "erro": "Não foi possível extrair dados com IA."}), 422
+    except Exception as e:
+        return jsonify({"isSuccess": False, "erro": str(e)}), 500
 
 @painel_bp.route("/painel-nevada/checklist-pdf/<id_aprovacao>", methods=["GET"])
 def ver_pdf_checklist(id_aprovacao):
