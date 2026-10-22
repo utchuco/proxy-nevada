@@ -112,10 +112,10 @@
                     <div class="card card-checklist h-100" data-id="{{ item.id_aprovacao }}" data-classe="{{ item.motivo_classe }}">
                         <div class="card-header-custom d-flex justify-content-between align-items-center">
                             <div>
-                                <span class="fw-bold fs-6 tracking-wide">{{ item.placa }}</span>
-                                {% if item.modelo_veiculo %}
-                                    <span class="ms-2 small text-white-50">&bull; {{ item.montadora }} {{ item.modelo_veiculo }}</span>
-                                {% endif %}
+                                <span class="fw-bold fs-6 tracking-wide" id="header_placa_{{ item.id_aprovacao }}">{{ item.placa }}</span>
+                                <span class="ms-2 small text-white-50" id="header_modelo_{{ item.id_aprovacao }}">
+                                    {% if item.modelo_veiculo %}&bull; {{ item.montadora }} {{ item.modelo_veiculo }}{% endif %}
+                                </span>
                             </div>
                             <span class="badge bg-light text-dark text-uppercase px-2 py-1" style="font-size: 0.7rem; font-weight: 700;">
                                 {{ item.tipo_veiculo or 'Alugado' }}
@@ -138,7 +138,8 @@
                             <div class="row g-2 mb-2">
                                 <div class="col-6">
                                     <label class="form-label">Placa:</label>
-                                    <input type="text" class="form-control fw-bold text-uppercase" id="placa_{{ item.id_aprovacao }}" value="{{ item.placa }}">
+                                    <input type="text" class="form-control fw-bold text-uppercase" id="placa_{{ item.id_aprovacao }}" value="{{ item.placa }}" oninput="validarPlacaEmTempoReal('{{ item.id_aprovacao }}')">
+                                    <div id="status_placa_{{ item.id_aprovacao }}" class="mt-1" style="font-size: 0.72rem; font-weight: 600;"></div>
                                 </div>
                                 <div class="col-6">
                                     <label class="form-label">KM Atual:</label>
@@ -175,8 +176,9 @@
                                     <input type="text" class="form-control" id="solic_{{ item.id_aprovacao }}" value="{{ item.solicitante or 'Equipe Nevada' }}">
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label">Telefone:</label>
-                                    <input type="text" class="form-control" id="tel_{{ item.id_aprovacao }}" value="{{ item.telefone or '11999999999' }}">
+                                    <label class="form-label">Telefone (Solicitante):</label>
+                                    <input type="text" class="form-control" id="tel_{{ item.id_aprovacao }}" value="{{ item.telefone or '11999999999' }}" oninput="validarTelefone('{{ item.id_aprovacao }}')">
+                                    <div id="status_tel_{{ item.id_aprovacao }}" class="mt-1" style="font-size: 0.72rem; font-weight: 600;"></div>
                                 </div>
                             </div>
 
@@ -277,16 +279,121 @@
             });
         }
 
-        // Inicializa cada card com sua respectiva classe inicial
+        let debounceTimerPlaca = {};
+
+        function validarTelefone(id) {
+            const input = document.getElementById('tel_' + id);
+            const status = document.getElementById('status_tel_' + id);
+            if (!input || !status) return false;
+
+            const digitos = input.value.replace(/\D/g, '');
+            const qtd = digitos.length;
+
+            if (qtd === 10 || qtd === 11) {
+                input.style.borderColor = '#198754';
+                input.style.backgroundColor = '#f0fff4';
+                status.style.color = '#198754';
+                status.textContent = `✓ ${qtd} dígitos (${qtd === 11 ? 'Celular com DDD' : 'Fixo com DDD'})`;
+                return true;
+            } else if (qtd === 0) {
+                input.style.borderColor = '#dc3545';
+                input.style.backgroundColor = '#fff5f5';
+                status.style.color = '#dc3545';
+                status.textContent = '⚠ Telefone obrigatório (10 ou 11 dígitos com DDD)';
+                return false;
+            } else if (qtd < 10) {
+                input.style.borderColor = '#dc3545';
+                input.style.backgroundColor = '#fff5f5';
+                status.style.color = '#dc3545';
+                status.textContent = `⚠ ${qtd} dígitos (Faltam ${10 - qtd} dígitos! Mínimo 10 com DDD)`;
+                return false;
+            } else {
+                input.style.borderColor = '#dc3545';
+                input.style.backgroundColor = '#fff5f5';
+                status.style.color = '#dc3545';
+                status.textContent = `⚠ ${qtd} dígitos (Excesso de ${qtd - 11} dígitos! Máximo 11 com DDD)`;
+                return false;
+            }
+        }
+
+        function validarPlacaEmTempoReal(id) {
+            const input = document.getElementById('placa_' + id);
+            const status = document.getElementById('status_placa_' + id);
+            const headerPlaca = document.getElementById('header_placa_' + id);
+            const headerModelo = document.getElementById('header_modelo_' + id);
+            if (!input || !status) return;
+
+            const placa = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            input.value = placa;
+            if (headerPlaca) headerPlaca.textContent = placa || 'PLACA';
+
+            if (placa.length < 7) {
+                input.style.borderColor = '#dc3545';
+                input.style.backgroundColor = '#fff5f5';
+                status.style.color = '#dc3545';
+                status.textContent = `⚠ Placa incompleta (${placa.length}/7)`;
+                return;
+            }
+
+            status.style.color = '#6c757d';
+            status.textContent = 'Verificando placa na frota...';
+
+            clearTimeout(debounceTimerPlaca[id]);
+            debounceTimerPlaca[id] = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/veiculo/${placa}/verificar`);
+                    const data = await res.json();
+                    if (data.isSuccess && data.existe) {
+                        input.style.borderColor = '#198754';
+                        input.style.backgroundColor = '#f0fff4';
+                        status.style.color = '#198754';
+                        const desc = [data.montadora, data.modelo].filter(Boolean).join(' ');
+                        status.textContent = `✓ ${desc || 'Veículo localizado'}`;
+                        if (headerModelo) {
+                            headerModelo.textContent = desc ? `• ${desc}` : '';
+                        }
+                    } else {
+                        input.style.borderColor = '#dc3545';
+                        input.style.backgroundColor = '#fff5f5';
+                        status.style.color = '#dc3545';
+                        status.textContent = '⚠ Placa NÃO cadastrada na frota!';
+                        if (headerModelo) {
+                            headerModelo.textContent = '• Não localizado';
+                        }
+                    }
+                } catch (err) {
+                    status.style.color = '#dc3545';
+                    status.textContent = 'Erro ao verificar placa';
+                }
+            }, 300);
+        }
+
+        // Inicializa cada card com sua respectiva classe inicial e validações
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.card-checklist[data-id]').forEach(function(card) {
                 const id = card.getAttribute('data-id');
                 const classe = card.getAttribute('data-classe');
                 atualizarClasses(id, classe);
+                validarTelefone(id);
+                validarPlacaEmTempoReal(id);
             });
         });
 
         async function aprovarChecklist(id) {
+            const telValido = validarTelefone(id);
+            if (!telValido) {
+                alert("Telefone inválido! Verifique a quantidade de dígitos (deve ter 10 ou 11 dígitos com DDD) antes de aprovar.");
+                document.getElementById('tel_' + id).focus();
+                return;
+            }
+
+            const placaVal = document.getElementById('placa_' + id).value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            if (placaVal.length !== 7) {
+                alert("Placa inválida! Verifique os 7 dígitos da placa antes de aprovar.");
+                document.getElementById('placa_' + id).focus();
+                return;
+            }
+
             if(!confirm("Confirmar envio para a Blue Fleet?")) return;
 
             const payload = {

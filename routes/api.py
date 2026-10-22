@@ -65,8 +65,8 @@ def receber_checklist():
         "plano_revisao_id": str(dados.get("plano_revisao_id", "149")),
         "descricao": dados.get("descricao") or dados.get("defeito_relatado") or "Manutenção",
         "data_agendamento": data_agendamento,
-        "solicitante": dados.get("solicitante") or dados.get("motorista_nome") or "Equipe Nevada",
-        "telefone": dados.get("telefone") or dados.get("motorista_telefone") or "11999999999",
+        "solicitante": dados.get("solicitante") or dados.get("nome_solicitante") or dados.get("motorista_nome") or "Equipe Nevada",
+        "telefone": str(dados.get("telefone") or dados.get("telefone_solicitante") or dados.get("motorista_telefone") or "11999999999"),
         "email": dados.get("email") or dados.get("motorista_email") or "frota@locadoranevada.com.br",
         "leva_e_traz": bool(dados.get("leva_e_traz", False)),
         "caminho_pdf": caminho_pdf_salvo,
@@ -82,6 +82,22 @@ def receber_checklist():
         "mensagem": "Checklist completo recebido e guardado para aprovação!",
         "id_aprovacao": novo_pendente["id_aprovacao"]
     }), 200
+
+@api_bp.route("/veiculo/<placa>/verificar", methods=["GET"])
+def api_verificar_veiculo(placa):
+    placa_limpa = placa.replace("-", "").replace(" ", "").upper()
+    dados = enriquecer_dados_veiculo(placa_limpa)
+    existe = bool(dados.get("modelo_veiculo"))
+    return jsonify({
+        "isSuccess": True,
+        "existe": existe,
+        "placa": placa_limpa,
+        "modelo": dados.get("modelo_veiculo", ""),
+        "montadora": dados.get("montadora", ""),
+        "cliente": dados.get("cliente_nome", ""),
+        "contrato_id": dados.get("contrato_id"),
+        "contract_item_id": dados.get("contract_item_id")
+    })
 
 @api_bp.route("/veiculos/sugestoes", methods=["GET"])
 def api_sugestoes():
