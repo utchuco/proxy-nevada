@@ -4,7 +4,19 @@ import json
 import base64
 import logging
 import requests
+import hashlib
 from io import BytesIO
+
+# Compatibilidade ReportLab no Python 3.8 (OpenSSL usedforsecurity fix)
+try:
+    hashlib.md5(usedforsecurity=False)
+except TypeError:
+    _orig_md5 = hashlib.md5
+    def _patched_md5(*args, **kwargs):
+        kwargs.pop('usedforsecurity', None)
+        return _orig_md5(*args, **kwargs)
+    hashlib.md5 = _patched_md5
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
