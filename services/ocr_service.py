@@ -32,9 +32,9 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
 """
 
     modelos = [
+        "gemini-flash-lite-latest",
         "gemini-3.5-flash-lite",
-        "gemini-3.8-flash",
-        "gemini-3.7-flash"
+        "gemini-2.5-flash"
     ]
 
     for modelo in modelos:
@@ -56,7 +56,7 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
         }
 
         try:
-            res = requests.post(url, json=payload, timeout=25)
+            res = requests.post(url, json=payload, timeout=15)
             if res.status_code == 200:
                 texto = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 if texto.startswith("```"):

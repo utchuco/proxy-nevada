@@ -1,11 +1,56 @@
 import os
 import json
 import base64
+import threading
+import contextlib
+
+try:
+    import fcntl
+    HAS_FCNTL = True
+except ImportError:
+    HAS_FCNTL = False
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKLISTS_FILE = os.path.join(BASE_DIR, "checklists_pendentes.json")
+LOCK_FILE = os.path.join(BASE_DIR, "checklists_pendentes.lock")
 CACHE_PLACAS_FILE = os.path.join(BASE_DIR, "placas_cache.json")
 PASTA_CHECKLISTS_PDF = os.path.join(BASE_DIR, "documentos", "checklists_recebidos")
+
+_storage_lock = threading.Lock()
+
+@contextlib.contextmanager
+def _lock_checklists():
+    """Garante exclusividade mútua entre threads e processos do Gunicorn."""
+    with _storage_lock:
+        if HAS_FCNTL:
+            try:
+                with open(LOCK_FILE, "a") as lf:
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                    try:
+                        yield
+                    finally:
+                        fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                yield
+        else:
+            yield
+
+def _gravar_checklists_atomico(fila):
+    """Grava o arquivo JSON de forma atômica para evitar corrupção ou leitura parcial."""
+    temp_file = os.path.join(BASE_DIR, f"checklists_pendentes.json.tmp.{os.getpid()}")
+    try:
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(fila, f, ensure_ascii=False, indent=4)
+        os.replace(temp_file, CHECKLISTS_FILE)
+    except Exception as e:
+        print(f"Aviso: gravação atômica de checklists fallback: {e}")
+        with open(CHECKLISTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(fila, f, ensure_ascii=False, indent=4)
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
 
 def obter_checklists_pendentes():
     if not os.path.exists(CHECKLISTS_FILE):
@@ -17,10 +62,10 @@ def obter_checklists_pendentes():
         return []
 
 def salvar_novo_checklist_pendente(novo_pendente):
-    fila = obter_checklists_pendentes()
-    fila.append(novo_pendente)
-    with open(CHECKLISTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(fila, f, ensure_ascii=False, indent=4)
+    with _lock_checklists():
+        fila = obter_checklists_pendentes()
+        fila.append(novo_pendente)
+        _gravar_checklists_atomico(fila)
     return novo_pendente
 
 def obter_checklist_por_id(id_aprovacao):
@@ -31,24 +76,24 @@ def obter_checklist_por_id(id_aprovacao):
     return None
 
 def remover_checklist_pendente(id_aprovacao):
-    fila = obter_checklists_pendentes()
-    nova_fila = [item for item in fila if item.get("id_aprovacao") != id_aprovacao]
-    with open(CHECKLISTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(nova_fila, f, ensure_ascii=False, indent=4)
+    with _lock_checklists():
+        fila = obter_checklists_pendentes()
+        nova_fila = [item for item in fila if item.get("id_aprovacao") != id_aprovacao]
+        _gravar_checklists_atomico(nova_fila)
     return True
 
 def atualizar_checklist_pendente(id_aprovacao, updates):
-    fila = obter_checklists_pendentes()
-    atualizado = False
-    for i, item in enumerate(fila):
-        if item.get("id_aprovacao") == id_aprovacao:
-            fila[i].update(updates)
-            atualizado = True
-            break
-    if atualizado:
-        with open(CHECKLISTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(fila, f, ensure_ascii=False, indent=4)
-    return atualizado
+    with _lock_checklists():
+        fila = obter_checklists_pendentes()
+        atualizado = False
+        for i, item in enumerate(fila):
+            if item.get("id_aprovacao") == id_aprovacao:
+                fila[i].update(updates)
+                atualizado = True
+                break
+        if atualizado:
+            _gravar_checklists_atomico(fila)
+        return atualizado
 
 def salvar_pdf_checklist(placa_limpa, id_aprovacao, pdf_base64):
     if not pdf_base64:

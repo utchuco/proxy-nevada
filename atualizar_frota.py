@@ -5,7 +5,7 @@ import requests
 import time
 from dotenv import load_dotenv
 
-DIRETORIO_BASE = "/home/ubuntu/proxy-nevada"
+DIRETORIO_BASE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(DIRETORIO_BASE, ".env"))
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")

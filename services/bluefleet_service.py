@@ -3,6 +3,7 @@ import re
 import json
 import time
 import base64
+import threading
 import requests
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
@@ -10,21 +11,42 @@ CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
 AUTH_URL = "https://auth.bluefleet.com.br/connect/token"
 API_URL = "https://api.bluefleet.com.br"
 
+_TOKEN_CACHE = {"token": None, "expires_at": 0}
+_token_lock = threading.Lock()
+
 def get_access_token():
-    client_id = os.getenv("BLUEFLEET_CLIENT_ID")
-    client_secret = os.getenv("BLUEFLEET_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        raise ValueError("Credenciais ausentes no servidor (verifique o arquivo .env)")
-    credentials = f"{client_id}:{client_secret}"
-    encoded = base64.b64encode(credentials.encode()).decode()
-    headers = {
-        "Authorization": f"Basic {encoded}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    data = {"grant_type": "client_credentials"}
-    response = requests.post(AUTH_URL, headers=headers, data=data, timeout=10)
-    response.raise_for_status()
-    return response.json().get("access_token")
+    """Obtém o token de acesso da Blue Fleet com cache em memória seguro (thread-safe)."""
+    now = time.time()
+    # Retorna do cache em memória se ainda for válido por pelo menos mais 60 segundos
+    if _TOKEN_CACHE["token"] and now < (_TOKEN_CACHE["expires_at"] - 60):
+        return _TOKEN_CACHE["token"]
+
+    with _token_lock:
+        now = time.time()
+        if _TOKEN_CACHE["token"] and now < (_TOKEN_CACHE["expires_at"] - 60):
+            return _TOKEN_CACHE["token"]
+
+        client_id = os.getenv("BLUEFLEET_CLIENT_ID")
+        client_secret = os.getenv("BLUEFLEET_CLIENT_SECRET")
+        if not client_id or not client_secret:
+            raise ValueError("Credenciais ausentes no servidor (verifique o arquivo .env)")
+
+        credentials = f"{client_id}:{client_secret}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {"grant_type": "client_credentials"}
+        response = requests.post(AUTH_URL, headers=headers, data=data, timeout=10)
+        response.raise_for_status()
+        res_json = response.json()
+        token = res_json.get("access_token")
+        expires_in = int(res_json.get("expires_in") or 3600)
+
+        _TOKEN_CACHE["token"] = token
+        _TOKEN_CACHE["expires_at"] = now + expires_in
+        return token
 
 def get_blindado(url, headers, rapido=False):
     tentativas = 1 if rapido else 3
@@ -258,7 +280,8 @@ def buscar_checklist_pdf_bluefleet(placa):
                 if isinstance(lista_arquivos, list):
                     for arquivo in lista_arquivos:
                         nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
-                        padrao_checklist = rf"^{placa_limpa}-\d{{2}}\.\d{{2}}\.\d{{2}}"
+                        placa_re = rf"{placa_limpa[:3]}-?{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa_limpa
+                        padrao_checklist = rf"^{placa_re}-\d{{2}}\.\d{{2}}\.\d{{2}}"
                         
                         if re.search(padrao_checklist, nome_bruto) and placa_limpa != "":
                             id_arquivo = arquivo.get("id", arquivo.get("fileId"))
