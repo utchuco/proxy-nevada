@@ -654,3 +654,102 @@ body {
         height: 28px;
     }
 }
+
+/* ==========================================================================
+   Painel de Gestão e Aprovação de Checklists
+   ========================================================================== */
+
+body.page-painel {
+    display: block;
+    width: 100%;
+    min-height: 100vh;
+    padding: 0;
+    margin: 0;
+    background-color: var(--bg-page);
+    color: var(--navy-900);
+}
+
+.page-painel .navbar-custom {
+    background-color: var(--navy-900);
+    border-bottom: 1px solid var(--navy-800);
+}
+
+.page-painel .card-checklist {
+    border: 1px solid var(--slate-200);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page-painel .card-checklist:hover {
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.page-painel .card-header-custom {
+    background-color: var(--navy-900);
+    color: #ffffff;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--navy-800);
+}
+
+.page-painel .card-checklist .form-label,
+.page-painel .modal .form-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--slate-600);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.page-painel .form-control,
+.page-painel .form-select {
+    font-size: 0.88rem;
+    border-color: var(--slate-200);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+}
+
+.page-painel .form-control:focus,
+.page-painel .form-select:focus {
+    border-color: var(--blue-600);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.page-painel .client-box {
+    background-color: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+}
+
+.page-painel .btn-approve {
+    background-color: #059669;
+    color: #ffffff;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+}
+
+.page-painel .btn-approve:hover {
+    background-color: #047857;
+    color: #ffffff;
+}
+
+.page-painel .btn-discard {
+    background-color: transparent;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    padding: 8px 14px;
+    transition: all 0.2s ease;
+}
+
+.page-painel .btn-discard:hover {
+    background-color: #fee2e2;
+    color: #b91c1c;
+}

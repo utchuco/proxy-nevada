@@ -1,0 +1,501 @@
+/**
+ * Painel de Gestão e Aprovação de Checklists - Locadora Nevada
+ * Script cliente responsável por monitoramento OCR, validações em tempo real e envio de ocorrências.
+ */
+
+const CLASSES_POR_TIPO = {
+    "PreventiveMaintenance": [
+        { id: "PreventiveMaintenanceQuilometerRevision", label: "Revisão por Quilometragem (KM)" },
+        { id: "PreventiveMaintenanceTimeRevision", label: "Revisão por Tempo" },
+        { id: "PreventiveMaintenanceOilExchange", label: "Troca de Óleo e Filtros" },
+        { id: "PreventiveMaintenanceTires", label: "Troca de Pneus (Desgaste Natural)" },
+        { id: "PreventiveMaintenanceBalancingAlignment", label: "Alinhamento e Balanceamento" },
+        { id: "PreventiveMaintenanceBrakes", label: "Freios (Revisão Preventiva)" }
+    ],
+    "CorrectiveMaintenance": [
+        { id: "CorrectiveMaintenanceMechanicalFailure", label: "Falha Mecânica Geral" },
+        { id: "CorrectiveMaintenanceEngine", label: "Motor (Falha / Aquecimento)" },
+        { id: "CorrectiveMaintenanceElectric", label: "Parte Elétrica / Iluminação" },
+        { id: "CorrectiveMaintenanceSuspension", label: "Suspensão e Amortecedores" },
+        { id: "CorrectiveMaintenanceBrakes", label: "Freios (Falha / Barulho)" },
+        { id: "CorrectiveMaintenanceTransmission", label: "Câmbio / Embreagem" },
+        { id: "CorrectiveMaintenanceBatteries", label: "Bateria" },
+        { id: "CorrectiveMaintenanceAirConditioning", label: "Ar Condicionado" },
+        { id: "CorrectiveMaintenanceBodyShop", label: "Funilaria / Lataria" },
+        { id: "CorrectiveMaintenanceGlasses", label: "Vidros / Para-brisa" },
+        { id: "CorrectiveMaintenanceTires", label: "Pneu Danificado (Furo / Rasgo)" },
+        { id: "CorrectiveMaintenanceLeakage", label: "Vazamentos (Óleo / Água)" },
+        { id: "CorrectiveMaintenanceAbnormalNoise", label: "Ruído Anormal / Barulho" },
+        { id: "CorrectiveMaintenanceVehicleWontStart", label: "Veículo não liga / Não dá partida" },
+        { id: "CorrectiveMaintenancePicks", label: "Retoques / Martelinho" }
+    ],
+    "Claim": [
+        { id: "ClaimAccidentCollision", label: "Acidente / Colisão" },
+        { id: "ClaimBodyAndPainting", label: "Funilaria e Pintura Completa" },
+        { id: "ClaimGlasses", label: "Quebra de Vidros" },
+        { id: "ClaimTheftOrRobberyVehicle", label: "Roubo ou Furto de Veículo" },
+        { id: "ClaimTheftOrRobberyAccessories", label: "Furto de Rodas / Acessórios" },
+        { id: "ClaimFlooding", label: "Alagamento / Enchente" }
+    ]
+};
+
+function atualizarClasses(id, classePreSelecionada = null) {
+    const selectTipo = document.getElementById('tipo_' + id);
+    const selectClasse = document.getElementById('classe_' + id);
+    if (!selectTipo || !selectClasse) return;
+    const tipo = selectTipo.value;
+    const classesDisponiveis = CLASSES_POR_TIPO[tipo] || [];
+
+    selectClasse.innerHTML = '';
+    classesDisponiveis.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.label;
+        if (classePreSelecionada && item.id === classePreSelecionada) {
+            opt.selected = true;
+        }
+        selectClasse.appendChild(opt);
+    });
+}
+
+let debounceTimerPlaca = {};
+
+function validarTelefone(id) {
+    const input = document.getElementById('tel_' + id);
+    const status = document.getElementById('status_tel_' + id);
+    if (!input || !status) return false;
+
+    const digitos = input.value.replace(/\D/g, '');
+    const qtd = digitos.length;
+
+    if (qtd === 10 || qtd === 11) {
+        input.style.borderColor = '#198754';
+        input.style.backgroundColor = '#f0fff4';
+        status.style.color = '#198754';
+        status.textContent = `✓ ${qtd} dígitos (${qtd === 11 ? 'Celular com DDD' : 'Fixo com DDD'})`;
+        return true;
+    } else if (qtd === 0) {
+        input.style.borderColor = '#dc3545';
+        input.style.backgroundColor = '#fff5f5';
+        status.style.color = '#dc3545';
+        status.textContent = '⚠ Telefone obrigatório (10 ou 11 dígitos com DDD)';
+        return false;
+    } else if (qtd < 10) {
+        input.style.borderColor = '#dc3545';
+        input.style.backgroundColor = '#fff5f5';
+        status.style.color = '#dc3545';
+        status.textContent = `⚠ ${qtd} dígitos (Faltam ${10 - qtd} dígitos! Mínimo 10 com DDD)`;
+        return false;
+    } else {
+        input.style.borderColor = '#dc3545';
+        input.style.backgroundColor = '#fff5f5';
+        status.style.color = '#dc3545';
+        status.textContent = `⚠ ${qtd} dígitos (Excesso de ${qtd - 11} dígitos! Máximo 11 com DDD)`;
+        return false;
+    }
+}
+
+function validarPlacaEmTempoReal(id) {
+    const input = document.getElementById('placa_' + id);
+    const status = document.getElementById('status_placa_' + id);
+    const headerPlaca = document.getElementById('header_placa_' + id);
+    const headerModelo = document.getElementById('header_modelo_' + id);
+    if (!input || !status) return;
+
+    const placa = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    input.value = placa;
+    if (headerPlaca) headerPlaca.textContent = placa || 'PLACA';
+
+    if (placa.length < 7) {
+        input.style.borderColor = '#dc3545';
+        input.style.backgroundColor = '#fff5f5';
+        status.style.color = '#dc3545';
+        status.textContent = `⚠ Placa incompleta (${placa.length}/7)`;
+        return;
+    }
+
+    status.style.color = '#6c757d';
+    status.textContent = 'Verificando placa na frota...';
+
+    clearTimeout(debounceTimerPlaca[id]);
+    debounceTimerPlaca[id] = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/veiculo/${placa}/verificar`);
+            const data = await res.json();
+            if (data.isSuccess && data.existe) {
+                input.style.borderColor = '#198754';
+                input.style.backgroundColor = '#f0fff4';
+                status.style.color = '#198754';
+                const desc = [data.montadora, data.modelo].filter(Boolean).join(' ');
+                status.textContent = `✓ ${desc || 'Veículo localizado'}`;
+                if (headerModelo) {
+                    headerModelo.textContent = desc ? `• ${desc}` : '';
+                }
+                const badge = document.getElementById('badge_tipo_' + id);
+                const boxCliente = document.getElementById('box_cliente_' + id);
+                if (data.cliente) {
+                    if (badge) {
+                        badge.className = 'badge bg-light text-dark text-uppercase px-2 py-1';
+                        badge.textContent = 'Alugado';
+                    }
+                    if (boxCliente) {
+                        boxCliente.innerHTML = `
+                            <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                            <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
+                                ${data.cliente} ${data.contrato_id ? '<span class="text-muted small fw-normal ms-1">(Contrato #' + data.contrato_id + ')</span>' : ''}
+                            </div>
+                        `;
+                    }
+                } else {
+                    if (badge) {
+                        badge.className = 'badge bg-success text-white text-uppercase px-2 py-1';
+                        badge.textContent = 'Disponível';
+                    }
+                    if (boxCliente) {
+                        boxCliente.innerHTML = `
+                            <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Situação do Veículo</div>
+                            <div class="fw-bold text-success mt-1" style="font-size: 0.9rem;">
+                                Disponível
+                            </div>
+                        `;
+                    }
+                }
+            } else {
+                input.style.borderColor = '#dc3545';
+                input.style.backgroundColor = '#fff5f5';
+                status.style.color = '#dc3545';
+                status.textContent = '⚠ Placa NÃO cadastrada na frota!';
+                if (headerModelo) {
+                    headerModelo.textContent = '• Não localizado';
+                }
+            }
+        } catch (err) {
+            status.style.color = '#dc3545';
+            status.textContent = 'Erro ao verificar placa';
+        }
+    }, 300);
+}
+
+async function aprovarChecklist(id) {
+    const telValido = validarTelefone(id);
+    if (!telValido) {
+        alert("Telefone inválido! Verifique a quantidade de dígitos (deve ter 10 ou 11 dígitos com DDD) antes de aprovar.");
+        document.getElementById('tel_' + id)?.focus();
+        return;
+    }
+
+    const placaVal = (document.getElementById('placa_' + id)?.value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (placaVal.length !== 7) {
+        alert("Placa inválida! Verifique os 7 dígitos da placa antes de aprovar.");
+        document.getElementById('placa_' + id)?.focus();
+        return;
+    }
+
+    if (!confirm("Confirmar envio para a Blue Fleet?")) return;
+
+    const payload = {
+        placa: document.getElementById('placa_' + id).value.trim(),
+        km_atual: document.getElementById('km_' + id).value,
+        descricao: document.getElementById('desc_' + id).value,
+        data_agendamento: document.getElementById('data_' + id).value,
+        motivo_id: document.getElementById('tipo_' + id).value,
+        motivo_classe: document.getElementById('classe_' + id).value,
+        solicitante: document.getElementById('solic_' + id).value.trim(),
+        telefone: document.getElementById('tel_' + id).value.trim(),
+        leva_e_traz: document.getElementById('leva_traz_' + id).value,
+        sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es'
+    };
+
+    const btnAprovar = document.querySelector('#card_' + id + ' .btn-approve');
+    if (btnAprovar) {
+        btnAprovar.disabled = true;
+        btnAprovar.innerText = "Enviando...";
+    }
+
+    try {
+        const response = await fetch('/painel-nevada/aprovar/' + id, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        
+        if (data.isSuccess) {
+            alert("Sucesso! Ocorrência criada na Blue Fleet: ID " + data.contractItemRequestId);
+            document.getElementById('card_' + id)?.remove();
+        } else {
+            alert("Erro da Blue Fleet: " + (data.erro || JSON.stringify(data)));
+            if (btnAprovar) {
+                btnAprovar.disabled = false;
+                btnAprovar.innerText = "Aprovar e Enviar";
+            }
+        }
+    } catch (error) {
+        alert("Erro ao conectar com o servidor: " + error);
+        if (btnAprovar) {
+            btnAprovar.disabled = false;
+            btnAprovar.innerText = "Aprovar e Enviar";
+        }
+    }
+}
+
+async function rejeitarChecklist(id) {
+    if (!confirm("Tem certeza que deseja descartar este checklist?")) return;
+
+    try {
+        const response = await fetch('/painel-nevada/rejeitar/' + id, { method: 'POST' });
+        const data = await response.json();
+        if (data.isSuccess) {
+            document.getElementById('card_' + id)?.remove();
+        } else {
+            alert("Erro ao descartar: " + data.erro);
+        }
+    } catch (error) {
+        alert("Erro ao conectar com o servidor.");
+    }
+}
+
+let debounceTimerModal = null;
+function validarPlacaModal() {
+    const input = document.getElementById('manual_placa');
+    const status = document.getElementById('manual_status_placa');
+    if (!input || !status) return;
+    const placa = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    input.value = placa;
+
+    if (placa.length < 7) {
+        input.style.borderColor = '#dc3545';
+        status.style.color = '#dc3545';
+        status.textContent = `⚠ ${placa.length}/7 caracteres`;
+        return;
+    }
+
+    status.style.color = '#6c757d';
+    status.textContent = 'Verificando...';
+
+    clearTimeout(debounceTimerModal);
+    debounceTimerModal = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/veiculo/${placa}/verificar`);
+            const data = await res.json();
+            if (data.isSuccess && data.existe) {
+                input.style.borderColor = '#198754';
+                status.style.color = '#198754';
+                const desc = [data.montadora, data.modelo].filter(Boolean).join(' ');
+                status.textContent = `✓ ${desc || 'Veículo localizado'} ${data.cliente ? '(' + data.cliente + ')' : '(Disponível)'}`;
+            } else {
+                input.style.borderColor = '#dc3545';
+                status.style.color = '#dc3545';
+                status.textContent = '⚠ Placa não cadastrada na frota!';
+            }
+        } catch(e) {
+            status.style.color = '#dc3545';
+            status.textContent = 'Erro ao verificar placa';
+        }
+    }, 300);
+}
+
+function detectarPlacaNomeArquivo(input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    const nome = file.name;
+
+    // Se o arquivo já tiver o padrão PLACA-DATA-TIPO (ex: UEX2G82-22.10.26-es.pdf)
+    const matchPlaca = nome.match(/^([A-Za-z0-9]{7})-/);
+    if (matchPlaca) {
+        const inputPlaca = document.getElementById('manual_placa');
+        if (inputPlaca && !inputPlaca.value) {
+            inputPlaca.value = matchPlaca[1].toUpperCase();
+            validarPlacaModal();
+        }
+    }
+}
+
+async function enviarChecklistManual() {
+    const fileInput = document.getElementById('manual_pdf');
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert("Por favor, selecione o arquivo PDF do checklist!");
+        fileInput.focus();
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const placaInput = document.getElementById('manual_placa');
+    const kmInput = document.getElementById('manual_km');
+    const tipoInput = document.getElementById('manual_tipo');
+    const solicInput = document.getElementById('manual_solic');
+    const telInput = document.getElementById('manual_tel');
+    const descInput = document.getElementById('manual_desc');
+
+    const btn = document.getElementById('btn_salvar_manual');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
+
+    const reader = new FileReader();
+    reader.onload = async function() {
+        try {
+            const base64Data = reader.result.split(',')[1];
+            const payload = {
+                placa: placaInput.value.trim(),
+                km_atual: kmInput.value || 0,
+                motivo_id: tipoInput.value,
+                solicitante: solicInput.value.trim(),
+                telefone: telInput.value.trim(),
+                descricao: descInput.value.trim(),
+                pdf_base64: base64Data,
+                pdf_nome: file.name
+            };
+
+            const res = await fetch('/painel-nevada/upload-imediato', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+            if (data.isSuccess) {
+                // Fecha o modal e recarrega a página instantaneamente
+                const modalEl = document.getElementById('modalUploadManual');
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) modalInstance.hide();
+                window.location.reload();
+            } else {
+                alert("Erro ao adicionar checklist: " + (data.erro || JSON.stringify(data)));
+                btn.disabled = false;
+                btn.innerText = "Adicionar ao Painel";
+            }
+        } catch(err) {
+            alert("Erro ao enviar: " + err);
+            btn.disabled = false;
+            btn.innerText = "Adicionar ao Painel";
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function iniciarMonitoramentoCard(id) {
+    const interval = setInterval(async () => {
+        try {
+            const res = await fetch('/painel-nevada/status-card/' + id);
+            const json = await res.json();
+            if (json.isSuccess && json.status_ocr === 'concluido') {
+                clearInterval(interval);
+                aplicarDadosExtraidosNoCard(id, json.dados);
+            }
+        } catch(e) {
+            console.error("Erro ao monitorar status do card:", e);
+        }
+    }, 2500);
+}
+
+function aplicarDadosExtraidosNoCard(id, dados) {
+    const card = document.getElementById('card_' + id);
+    if (!card) return;
+
+    // 1. Atualiza o banner de OCR
+    const banner = document.getElementById('banner_ocr_' + id);
+    if (banner) {
+        banner.className = 'alert alert-success py-2 px-3 mb-3 d-flex align-items-center gap-2';
+        banner.innerHTML = '<strong>✓ IA concluiu a leitura da caligrafia!</strong>';
+        setTimeout(() => { banner.remove(); }, 3500);
+    }
+
+    // 2. Preenche os campos do formulário
+    if (dados.placa && dados.placa !== "NÃO IDENTIFICADA" && dados.placa !== "AGUARDANDO IA...") {
+        const inputPlaca = document.getElementById('placa_' + id);
+        if (inputPlaca) inputPlaca.value = dados.placa;
+        const headerPlaca = document.getElementById('header_placa_' + id);
+        if (headerPlaca) headerPlaca.textContent = dados.placa;
+    }
+    if (dados.km_atual) {
+        const inputKm = document.getElementById('km_' + id);
+        if (inputKm) inputKm.value = dados.km_atual;
+    }
+    if (dados.solicitante) {
+        const inputSolic = document.getElementById('solic_' + id);
+        if (inputSolic) inputSolic.value = dados.solicitante;
+    }
+    if (dados.telefone) {
+        const inputTel = document.getElementById('tel_' + id);
+        if (inputTel) inputTel.value = dados.telefone;
+    }
+    if (dados.descricao) {
+        const inputDesc = document.getElementById('desc_' + id);
+        if (inputDesc) inputDesc.value = dados.descricao;
+    }
+    if (dados.data_agendamento) {
+        const inputData = document.getElementById('data_' + id);
+        if (inputData) inputData.value = dados.data_agendamento.slice(0, 16);
+    }
+    if (dados.sufixo_tipo) {
+        const selectTipoPdf = document.getElementById('tipo_pdf_' + id);
+        if (selectTipoPdf) selectTipoPdf.value = dados.sufixo_tipo;
+    }
+
+    // 3. Atualiza cabeçalho e modelo
+    const headerModelo = document.getElementById('header_modelo_' + id);
+    if (headerModelo && (dados.montadora || dados.modelo_veiculo)) {
+        headerModelo.textContent = `• ${dados.montadora} ${dados.modelo_veiculo}`;
+    }
+
+    // 4. Atualiza badge e box do cliente
+    const badge = document.getElementById('badge_tipo_' + id);
+    const boxCliente = document.getElementById('box_cliente_' + id);
+    if (dados.cliente_nome) {
+        if (badge) {
+            badge.className = 'badge bg-light text-dark text-uppercase px-2 py-1';
+            badge.textContent = 'Alugado';
+        }
+        if (boxCliente) {
+            boxCliente.innerHTML = `
+                <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
+                    ${dados.cliente_nome} ${dados.contrato_id ? '<span class="text-muted small fw-normal ms-1">(Contrato #' + dados.contrato_id + ')</span>' : ''}
+                </div>
+            `;
+        }
+    } else {
+        if (badge) {
+            badge.className = 'badge bg-success text-white text-uppercase px-2 py-1';
+            badge.textContent = 'Disponível';
+        }
+        if (boxCliente) {
+            boxCliente.innerHTML = `
+                <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Situação do Veículo</div>
+                <div class="fw-bold text-success mt-1" style="font-size: 0.9rem;">
+                    Disponível
+                </div>
+            `;
+        }
+    }
+
+    // 5. Reativa o botão de aprovação
+    const btnAprovar = document.getElementById('btn_aprovar_' + id);
+    if (btnAprovar) {
+        btnAprovar.disabled = false;
+        btnAprovar.innerText = "Aprovar e Enviar";
+    }
+
+    // 6. Roda validações visuais em tempo real (borda verde/vermelha)
+    validarTelefone(id);
+    validarPlacaEmTempoReal(id);
+}
+
+// Inicializa cada card com sua respectiva classe inicial e validações
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.card-checklist[data-id]').forEach(function(card) {
+        const id = card.getAttribute('data-id');
+        const classe = card.getAttribute('data-classe');
+        const statusOcr = card.getAttribute('data-status-ocr');
+
+        atualizarClasses(id, classe);
+
+        if (statusOcr === 'processando') {
+            iniciarMonitoramentoCard(id);
+        } else {
+            validarTelefone(id);
+            validarPlacaEmTempoReal(id);
+        }
+    });
+});
