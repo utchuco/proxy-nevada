@@ -126,8 +126,16 @@ def buscar_dados_veiculo_e_reserva(placa):
                     ocorrencias = r_ocorrencia.json().get("data", [])
                     ocorrencias.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
 
-                    for oc in ocorrencias[:10]:
-                        time.sleep(0.1)
+                    # Filtra APENAS ocorrências ativas (não concluídas e não canceladas) para buscar carro reserva em andamento
+                    ocorrencias_ativas = [
+                        oc for oc in ocorrencias
+                        if str(oc.get("contractItemRequestStatusName", "")).strip().lower() not in ["concluída", "concluida", "cancelada"]
+                    ]
+
+                    # Padrão estrito de placa brasileira: ABC-1234 ou ABC1D23 (Mercosul), evitando casar palavras como 'IMAGE 2026'
+                    padrao_placa = re.compile(r'(?<![A-Z0-9])([A-Z]{3}-?(?:[0-9]{4}|[0-9][A-Z][0-9]{2}))(?![A-Z0-9])', re.IGNORECASE)
+
+                    for oc in ocorrencias_ativas[:5]:
                         req_id = oc.get("contractItemRequestId")
                         if not req_id:
                             continue
@@ -138,12 +146,12 @@ def buscar_dados_veiculo_e_reserva(placa):
                             if isinstance(arquivos, list):
                                 for arquivo in arquivos:
                                     nome_bruto = str(arquivo.get("filename", arquivo.get("fileName", arquivo.get("name", "")))).upper()
-                                    match_placa = re.search(r'([A-Z]{3}[ -]?[0-9][A-Z0-9][0-9]{2})', nome_bruto)
+                                    match_placa = padrao_placa.search(nome_bruto)
                                     if match_placa:
                                         placa_achada = match_placa.group(1).replace("-", "").replace(" ", "")
                                         if placa_achada != placa_limpa_base:
                                             placa_reserva_api = f"{placa_achada[:3]}-{placa_achada[3:]}"
-                                            r_reserva = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}", headers)
+                                            r_reserva = get_blindado(f"{API_URL}/vehicle?LicensePlate={placa_reserva_api}", headers, rapido=True)
                                             if r_reserva.status_code == 200 and r_reserva.json().get("data"):
                                                 v_teste = r_reserva.json().get("data")[0]
                                                 if str(v_teste.get("vehicleStatusId")) == "14":
@@ -167,28 +175,21 @@ def buscar_dados_veiculo_e_reserva(placa):
                                                         carro_reserva = v_teste
                                                         reserva_oculta_detectada = False
                                                         break
-                                                    else:
-                                                        # Foi achada uma placa nos checklists que é reserva, mas não está ativa para este titular
-                                                        reserva_oculta_detectada = True
 
                         if carro_reserva:
                             break
-            except Exception as e:
-                print(f"Erro na extração do reserva: {e}")
 
-            if not carro_reserva:
-                try:
-                    if 'ocorrencias' in locals() and ocorrencias:
-                        for oc in ocorrencias[:10]:
+                    # Se após checar as ocorrências ATIVAS ainda não achou o veículo reserva mas alguma ATIVA é de motivo Carro Reserva
+                    if not carro_reserva and ocorrencias_ativas:
+                        for oc in ocorrencias_ativas[:5]:
                             reason_id = str(oc.get("contractItemRequestReasonId", ""))
                             reason_name = str(oc.get("contractItemRequestReasonName", "")).lower()
-                            status_name = str(oc.get("contractItemRequestStatusName", "")).lower()
                             step_name = str(oc.get("workflowStepName", "")).lower()
-                            if (reason_id == "5" or "reserva" in reason_name or "reserva" in json.dumps(oc).lower()) and ("andamento" in status_name or "aguardando devolu" in step_name):
+                            if reason_id == "5" or "reserva" in reason_name or "aguardando devolu" in step_name:
                                 reserva_oculta_detectada = True
                                 break
-                except Exception:
-                    pass
+            except Exception as e:
+                print(f"Erro na extração do reserva: {e}")
 
         # Busca avisos e políticas de frota vinculados ao contrato
         contract_id = None
