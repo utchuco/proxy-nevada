@@ -90,10 +90,15 @@ body {
     word-break: break-word;
 }
 
+.card-container.card-search {
+    overflow: visible !important;
+}
+
 /* Placa Input Styling */
 .input-placa-wrapper {
     position: relative;
     margin-bottom: 16px;
+    z-index: 1000;
 }
 
 .input-placa {
@@ -409,18 +414,37 @@ body {
 /* Autocomplete */
 .suggestions-list {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 6px);
     left: 0;
     right: 0;
-    z-index: 50;
+    z-index: 9999;
     background: #ffffff;
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-dropdown);
-    max-height: 240px;
+    box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.16), 0 8px 12px -6px rgba(15, 23, 42, 0.08);
+    max-height: 280px;
     overflow-y: auto;
-    margin-top: 6px;
+    margin-top: 0;
     list-style: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.suggestions-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.suggestions-list::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.suggestions-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 8px;
+}
+
+.suggestions-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .suggestion-item {
