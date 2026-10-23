@@ -26,8 +26,7 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
   "nome_solicitante": "Nome escrito no campo Nome / Solicitante (do cliente)",
   "telefone_solicitante": "Apenas dígitos numéricos com DDD (ex: 11943245265)",
   "km_atual": "quilometragem numérica informada (apenas números inteiros)",
-  "combustivel": "nível marcado de combustível (ex: 1/4, 1/2, 3/4, Cheio)",
-  "avarias_observacoes": "danos assinalados no desenho ou observações escritas"
+  "observacoes": "texto manuscrito escrito especificamente no campo 'Observações' ou 'Observação'. NÃO incluir marcações de avarias feitas no desenho da lataria do veículo e NÃO incluir nível de combustível. Apenas o que foi escrito à mão no campo de observações. Se não houver nada escrito, retorne uma string vazia \"\"."
 }
 """
 

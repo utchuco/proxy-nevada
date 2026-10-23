@@ -87,17 +87,15 @@ def processar_ocr_assincrono(id_aprovacao, caminho_pdf, dados_iniciais):
         if tipo_ia in ["e", "s", "es"]:
             updates["sufixo_tipo"] = tipo_ia
 
-        desc_atual = dados_iniciais.get("descricao") or ""
-        desc_ia = dados_ia.get("avarias_observacoes") or ""
-        if dados_ia.get("combustivel"):
-            desc_ia += (f" | Combustível: {dados_ia.get('combustivel')}" if desc_ia else f"Combustível: {dados_ia.get('combustivel')}")
+        desc_atual = (dados_iniciais.get("descricao") or "").strip()
+        obs_ia = (dados_ia.get("observacoes") or dados_ia.get("avarias_observacoes") or "").strip()
 
-        if desc_ia and not desc_atual:
-            updates["descricao"] = desc_ia
-        elif desc_ia and desc_atual and desc_atual != "Checklist de veículo":
-            updates["descricao"] = f"{desc_atual} ({desc_ia})"
-        elif desc_ia:
-            updates["descricao"] = desc_ia
+        if obs_ia and not desc_atual:
+            updates["descricao"] = obs_ia
+        elif obs_ia and desc_atual and desc_atual != "Checklist de veículo":
+            updates["descricao"] = f"{desc_atual} ({obs_ia})"
+        elif obs_ia:
+            updates["descricao"] = obs_ia
 
         atualizar_checklist_pendente(id_aprovacao, updates)
     except Exception as e:
