@@ -23,6 +23,29 @@ from services.ocr_service import extrair_dados_checklist_pdf
 
 painel_bp = Blueprint("painel", __name__)
 
+def converter_data_para_iso(data_str):
+    """Converte datas nos formatos DD.MM.AA, DD/MM/AAAA, DD-MM-AA, etc. para ISO YYYY-MM-DDTHH:MM:SS."""
+    if not data_str:
+        return None
+    data_str = str(data_str).strip()
+    if re.match(r'^\d{4}-\d{2}-\d{2}', data_str):
+        if len(data_str) == 10:
+            return f"{data_str}T10:00:00"
+        return data_str[:19]
+    
+    m_full = re.search(r'(\d{1,2})[./-](\d{1,2})[./-](\d{4})', data_str)
+    if m_full:
+        d, m, y = m_full.group(1).zfill(2), m_full.group(2).zfill(2), m_full.group(3)
+        return f"{y}-{m}-{d}T10:00:00"
+
+    m_short = re.search(r'(\d{1,2})[./-](\d{1,2})[./-](\d{2})', data_str)
+    if m_short:
+        d, m, y = m_short.group(1).zfill(2), m_short.group(2).zfill(2), m_short.group(3)
+        ano_completo = f"20{y}"
+        return f"{ano_completo}-{m}-{d}T10:00:00"
+        
+    return None
+
 def processar_ocr_assincrono(id_aprovacao, caminho_pdf, dados_iniciais):
     """Executa a decifração da caligrafia com a IA em segundo plano e atualiza os dados do card."""
     try:
@@ -56,6 +79,14 @@ def processar_ocr_assincrono(id_aprovacao, caminho_pdf, dados_iniciais):
         if dados_ia.get("telefone_solicitante"):
             updates["telefone"] = dados_ia.get("telefone_solicitante")
 
+        data_ia = converter_data_para_iso(dados_ia.get("data"))
+        if data_ia:
+            updates["data_agendamento"] = data_ia
+
+        tipo_ia = str(dados_ia.get("tipo") or "").lower().strip()
+        if tipo_ia in ["e", "s", "es"]:
+            updates["sufixo_tipo"] = tipo_ia
+
         desc_atual = dados_iniciais.get("descricao") or ""
         desc_ia = dados_ia.get("avarias_observacoes") or ""
         if dados_ia.get("combustivel"):
@@ -84,9 +115,9 @@ def painel_nevada():
             try:
                 item["data_agendamento_local"] = dt_raw[:16]
             except Exception:
-                item["data_agendamento_local"] = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
+                item["data_agendamento_local"] = datetime.now().strftime("%Y-%m-%dT10:00")
         else:
-            item["data_agendamento_local"] = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
+            item["data_agendamento_local"] = datetime.now().strftime("%Y-%m-%dT10:00")
 
     return render_template("painel.html", checklists=pendentes)
 
@@ -132,7 +163,9 @@ def painel_upload_imediato():
     if len(placa_inicial) == 7 and placa_inicial != "AGUARDANDO IA...":
         dados_veiculo = enriquecer_dados_veiculo(placa_inicial)
 
-    amanha_iso = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
+    hoje_iso = datetime.now().strftime("%Y-%m-%dT10:00:00")
+    m_tipo = re.search(r'-(es|e|s)(?:\.pdf)?$', pdf_nome, re.IGNORECASE)
+    sufixo_detectado = m_tipo.group(1).lower() if m_tipo else "es"
 
     novo_pendente = {
         "id_aprovacao": id_aprovacao,
@@ -148,7 +181,8 @@ def painel_upload_imediato():
         "motivo_classe": dados.get("motivo_classe") or "CorrectiveMaintenanceMechanicalFailure",
         "plano_revisao_id": "149",
         "descricao": dados.get("descricao") or "",
-        "data_agendamento": dados.get("data_agendamento") or amanha_iso,
+        "data_agendamento": dados.get("data_agendamento") or hoje_iso,
+        "sufixo_tipo": sufixo_detectado,
         "solicitante": dados.get("solicitante") or "Equipe Nevada",
         "telefone": dados.get("telefone") or "11999999999",
         "email": "frota@locadoranevada.com.br",
@@ -221,35 +255,33 @@ def painel_aprovar(id_aprovacao):
     else:
         placa_api = placa
 
-    # 1. Tratamento da Data: formato oficial Blue Fleet (YYYY-MM-DDTHH:MM:SS) e futura
-    amanha = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
-
+    # 1. Tratamento da Data: formato oficial Blue Fleet (YYYY-MM-DDTHH:MM:SS), respeitando a data real informada
     dt_input = (edicoes.get("data_agendamento") or "").strip()
     if dt_input:
         try:
-            dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
-            if dt_obj <= datetime.now():
-                dt_obj = datetime.now() + timedelta(days=1)
-            data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00")
+            if len(dt_input) == 16:
+                dt_obj = datetime.strptime(dt_input, "%Y-%m-%dT%H:%M")
+                data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:00")
+            elif len(dt_input) >= 19:
+                dt_obj = datetime.strptime(dt_input[:19], "%Y-%m-%dT%H:%M:%S")
+                data_iso = dt_obj.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                data_iso = dt_input
         except Exception:
-            data_iso = amanha
+            data_iso = datetime.now().strftime("%Y-%m-%dT10:00:00")
     else:
         raw_agendamento = checklist_alvo.get("data_agendamento")
         if raw_agendamento and "T" in str(raw_agendamento):
             data_iso = str(raw_agendamento).replace(".000Z", "").replace("Z", "")
             if len(data_iso) > 19:
                 data_iso = data_iso[:19]
-            try:
-                dt_teste = datetime.strptime(data_iso, "%Y-%m-%dT%H:%M:%S")
-                if dt_teste <= datetime.now():
-                    data_iso = amanha
-            except Exception:
-                data_iso = amanha
+            elif len(data_iso) == 16:
+                data_iso = f"{data_iso}:00"
         else:
-            data_iso = amanha
+            data_iso = datetime.now().strftime("%Y-%m-%dT10:00:00")
 
     if not data_iso or len(str(data_iso).strip()) < 10:
-        data_iso = amanha
+        data_iso = datetime.now().strftime("%Y-%m-%dT10:00:00")
 
     # 2. Mapeamento de motivos e classes da Blue Fleet
     motivo_raw = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "CorrectiveMaintenance"))
@@ -305,10 +337,14 @@ def painel_aprovar(id_aprovacao):
                 except Exception:
                     data_formatada_pdf = datetime.now().strftime("%d.%m.%y")
 
-                # Detecta o tipo (e, s ou es) a partir do nome original
-                nome_original = str(checklist_alvo.get("pdf_nome") or "")
-                match_tipo = re.search(r'-(es|e|s)(?:\.pdf)?$', nome_original, re.IGNORECASE)
-                sufixo_tipo = match_tipo.group(1).lower() if match_tipo else "e"
+                # Detecta ou usa o tipo escolhido (es, e ou s)
+                sufixo_tipo = edicoes.get("sufixo_tipo") or checklist_alvo.get("sufixo_tipo")
+                if not sufixo_tipo:
+                    nome_original = str(checklist_alvo.get("pdf_nome") or "")
+                    match_tipo = re.search(r'-(es|e|s)(?:\.pdf)?$', nome_original, re.IGNORECASE)
+                    sufixo_tipo = match_tipo.group(1).lower() if match_tipo else "es"
+                else:
+                    sufixo_tipo = str(sufixo_tipo).lower().strip()
 
                 nome_arquivo_final = f"{placa_limpa}-{data_formatada_pdf}-{sufixo_tipo}.pdf"
 
@@ -321,6 +357,10 @@ def painel_aprovar(id_aprovacao):
                 })
             except Exception as e_pdf:
                 print(f"Aviso: não foi possível codificar PDF do checklist: {e_pdf}")
+        elif caminho_pdf:
+            print(f"Aviso: Arquivo PDF indicado não encontrado no disco: {caminho_pdf}")
+        else:
+            print(f"Aviso: Checklist {id_aprovacao} aprovado sem arquivo PDF vinculado.")
 
         payload_bluefleet = {
             "contractItemRequestReasonId": motivo_id,

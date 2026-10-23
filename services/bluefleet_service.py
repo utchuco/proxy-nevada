@@ -621,13 +621,15 @@ def criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_is
         
         # Avanço Automático do Workflow até Aguardando Orçamento (3 passos)
         try:
-            requests.post(f"{API_URL}/contract-item-request/{req_id}/pre-scheduling", 
-                          headers=headers, json={"providerId": 197, "scheduledFor": data_iso}, timeout=5)
-            requests.post(f"{API_URL}/contract-item-request/{req_id}/schedule-confirmation", 
-                          headers=headers, timeout=5)
+            r_pre = requests.post(f"{API_URL}/contract-item-request/{req_id}/pre-scheduling", 
+                                  headers=headers, json={"providerId": 197, "scheduledFor": data_iso}, timeout=5)
+            r_cnf = requests.post(f"{API_URL}/contract-item-request/{req_id}/schedule-confirmation", 
+                                  headers=headers, timeout=5)
             r_chk = requests.post(f"{API_URL}/contract-item-request/{req_id}/waiting-checkin", 
                                   headers=headers, json={"confirmVehicleCheckinDate": data_iso}, timeout=5)
-            print(f"Transição de fila concluída para ocorrência {req_id} (Status {r_chk.status_code})")
+            print(f"Transição de fila para ocorrência {req_id}: pre={r_pre.status_code}, cnf={r_cnf.status_code}, chk={r_chk.status_code}")
+            if r_chk.status_code not in [200, 201]:
+                print(f"Aviso retorno waiting-checkin: {r_chk.text}")
         except Exception as e_chk:
             print(f"Aviso: Falha na transição automática de fila: {e_chk}")
 
