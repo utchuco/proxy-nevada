@@ -121,22 +121,21 @@
                 <div class="modal-body p-4">
                     <div class="mb-3">
                         <label class="form-label">Arquivo PDF do Checklist:</label>
-                        <input type="file" id="manual_pdf" accept=".pdf" class="form-control" onchange="detectarDadosDoNomeArquivo(this)">
-                        <div id="status_ocr_modal" class="mt-2" style="font-size: 0.78rem;"></div>
-                        <div class="form-text text-muted" style="font-size: 0.72rem;">
-                            Selecione o PDF: a IA decifrará a caligrafia e preencherá os campos automaticamente.
+                        <input type="file" id="manual_pdf" accept=".pdf" class="form-control" onchange="detectarPlacaNomeArquivo(this)">
+                        <div class="form-text text-muted" style="font-size: 0.75rem;">
+                            Selecione o PDF e clique em <b>"Adicionar ao Painel"</b>. A IA decifrará a caligrafia e preencherá os campos em segundo plano sem você precisar esperar!
                         </div>
                     </div>
 
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label">Placa:</label>
-                            <input type="text" class="form-control text-uppercase fw-bold" id="manual_placa" placeholder="ABC1D23" oninput="validarPlacaModal()">
+                            <label class="form-label">Placa (Opcional):</label>
+                            <input type="text" class="form-control text-uppercase fw-bold" id="manual_placa" placeholder="Detectar via IA" oninput="validarPlacaModal()">
                             <div id="manual_status_placa" class="mt-1" style="font-size: 0.72rem; font-weight: 600;"></div>
                         </div>
                         <div class="col-6">
-                            <label class="form-label">KM Atual:</label>
-                            <input type="number" class="form-control" id="manual_km" placeholder="ex: 20400">
+                            <label class="form-label">KM Atual (Opcional):</label>
+                            <input type="number" class="form-control" id="manual_km" placeholder="Detectar via IA">
                         </div>
                     </div>
 
@@ -151,18 +150,18 @@
 
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label">Solicitante:</label>
-                            <input type="text" class="form-control" id="manual_solic" value="Equipe Nevada">
+                            <label class="form-label">Solicitante (Opcional):</label>
+                            <input type="text" class="form-control" id="manual_solic" placeholder="Detectar via IA">
                         </div>
                         <div class="col-6">
-                            <label class="form-label">Telefone (Solicitante):</label>
-                            <input type="text" class="form-control" id="manual_tel" value="11999999999">
+                            <label class="form-label">Telefone (Opcional):</label>
+                            <input type="text" class="form-control" id="manual_tel" placeholder="Detectar via IA">
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Descrição do Problema / Serviço:</label>
-                        <textarea class="form-control" id="manual_desc" rows="2" placeholder="Descreva os serviços ou avarias anotadas..."></textarea>
+                        <label class="form-label">Descrição / Observações (Opcional):</label>
+                        <textarea class="form-control" id="manual_desc" rows="2" placeholder="Detectar avarias via IA ou preencher se desejar..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light p-3">
@@ -183,7 +182,7 @@
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
                 {% for item in checklists %}
                 <div class="col" id="card_{{ item.id_aprovacao }}">
-                    <div class="card card-checklist h-100" data-id="{{ item.id_aprovacao }}" data-classe="{{ item.motivo_classe }}">
+                    <div class="card card-checklist h-100" data-id="{{ item.id_aprovacao }}" data-classe="{{ item.motivo_classe }}" data-status-ocr="{{ item.status_ocr or 'concluido' }}">
                         <div class="card-header-custom d-flex justify-content-between align-items-center">
                             <div>
                                 <span class="fw-bold fs-6 tracking-wide" id="header_placa_{{ item.id_aprovacao }}">{{ item.placa }}</span>
@@ -196,6 +195,14 @@
                             </span>
                         </div>
                         <div class="card-body p-3">
+                            <div id="banner_ocr_{{ item.id_aprovacao }}" class="alert alert-primary py-2 px-3 mb-3 d-flex align-items-center gap-2 {% if item.status_ocr != 'processando' %}d-none{% endif %}" style="font-size: 0.78rem; border-radius: 8px;">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <div>
+                                    <strong class="text-primary">IA processando manuscrito em segundo plano...</strong>
+                                    <div class="text-secondary" style="font-size: 0.72rem;">Os dados serão preenchidos automaticamente assim que concluir.</div>
+                                </div>
+                            </div>
+
                             <div class="mb-3 client-box" id="box_cliente_{{ item.id_aprovacao }}">
                                 {% if item.cliente_nome %}
                                     <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
@@ -295,7 +302,13 @@
 
                         <div class="card-footer bg-white border-top d-flex justify-content-between p-3">
                             <button class="btn btn-discard btn-sm" onclick="rejeitarChecklist('{{ item.id_aprovacao }}')">Descartar</button>
-                            <button class="btn btn-approve btn-sm px-3" onclick="aprovarChecklist('{{ item.id_aprovacao }}')">Aprovar e Enviar</button>
+                            <button class="btn btn-approve btn-sm px-3" id="btn_aprovar_{{ item.id_aprovacao }}" onclick="aprovarChecklist('{{ item.id_aprovacao }}')" {% if item.status_ocr == 'processando' %}disabled{% endif %}>
+                                {% if item.status_ocr == 'processando' %}
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Aguardando IA...
+                                {% else %}
+                                    Aprovar e Enviar
+                                {% endif %}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -482,9 +495,16 @@
             document.querySelectorAll('.card-checklist[data-id]').forEach(function(card) {
                 const id = card.getAttribute('data-id');
                 const classe = card.getAttribute('data-classe');
+                const statusOcr = card.getAttribute('data-status-ocr');
+
                 atualizarClasses(id, classe);
-                validarTelefone(id);
-                validarPlacaEmTempoReal(id);
+
+                if (statusOcr === 'processando') {
+                    iniciarMonitoramentoCard(id);
+                } else {
+                    validarTelefone(id);
+                    validarPlacaEmTempoReal(id);
+                }
             });
         });
 
@@ -606,77 +626,31 @@
             }, 300);
         }
 
-        function detectarDadosDoNomeArquivo(input) {
+        function detectarPlacaNomeArquivo(input) {
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
             const nome = file.name;
-            const statusOcr = document.getElementById('status_ocr_modal');
 
-            // 1. Tenta preencher a placa instantaneamente pelo nome do arquivo se já tiver o padrão
+            // Se o arquivo já tiver o padrão PLACA-DATA-TIPO (ex: UEX2G82-22.10.26-es.pdf)
             const matchPlaca = nome.match(/^([A-Za-z0-9]{7})-/);
             if (matchPlaca) {
                 const inputPlaca = document.getElementById('manual_placa');
-                inputPlaca.value = matchPlaca[1].toUpperCase();
-                validarPlacaModal();
-            }
-
-            // 2. Envia para a IA do Gemini extrair o manuscrito completo (KM, Solicitante, Fone, Avarias)
-            if (statusOcr) {
-                statusOcr.innerHTML = '<span class="text-primary fw-bold"><span class="spinner-border spinner-border-sm me-1"></span> Lendo caligrafia com a IA do Gemini...</span>';
-            }
-
-            const reader = new FileReader();
-            reader.onload = async function() {
-                try {
-                    const base64Data = reader.result.split(',')[1];
-                    const res = await fetch('/painel-nevada/ocr-pdf', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pdf_base64: base64Data })
-                    });
-                    const resp = await res.json();
-                    if (resp.isSuccess && resp.dados) {
-                        const d = resp.dados;
-                        if (d.placa) {
-                            document.getElementById('manual_placa').value = d.placa.toUpperCase().trim();
-                            validarPlacaModal();
-                        }
-                        if (d.km_atual) {
-                            document.getElementById('manual_km').value = d.km_atual;
-                        }
-                        if (d.nome_solicitante) {
-                            document.getElementById('manual_solic').value = d.nome_solicitante;
-                        }
-                        if (d.telefone_solicitante) {
-                            document.getElementById('manual_tel').value = d.telefone_solicitante;
-                        }
-                        let descFinal = d.avarias_observacoes || '';
-                        if (d.combustivel) {
-                            descFinal += (descFinal ? ' | ' : '') + 'Combustível: ' + d.combustivel;
-                        }
-                        if (descFinal) {
-                            document.getElementById('manual_desc').value = descFinal;
-                        }
-
-                        if (statusOcr) {
-                            statusOcr.innerHTML = '<span class="text-success fw-bold">✓ Caligrafia decifrada e campos preenchidos pela IA!</span>';
-                        }
-                    } else {
-                        if (statusOcr) {
-                            statusOcr.innerHTML = '<span class="text-muted">Aviso: Não foi possível ler automaticamente. Você pode preencher manualmente.</span>';
-                        }
-                    }
-                } catch(e) {
-                    if (statusOcr) {
-                        statusOcr.innerHTML = '<span class="text-muted">Preencha os campos manualmente se desejar.</span>';
-                    }
+                if (inputPlaca && !inputPlaca.value) {
+                    inputPlaca.value = matchPlaca[1].toUpperCase();
+                    validarPlacaModal();
                 }
-            };
-            reader.readAsDataURL(file);
+            }
         }
 
         async function enviarChecklistManual() {
             const fileInput = document.getElementById('manual_pdf');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Por favor, selecione o arquivo PDF do checklist!");
+                fileInput.focus();
+                return;
+            }
+
+            const file = fileInput.files[0];
             const placaInput = document.getElementById('manual_placa');
             const kmInput = document.getElementById('manual_km');
             const tipoInput = document.getElementById('manual_tipo');
@@ -684,40 +658,26 @@
             const telInput = document.getElementById('manual_tel');
             const descInput = document.getElementById('manual_desc');
 
-            const placa = placaInput.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-            if (placa.length !== 7) {
-                alert("Digite uma placa válida com 7 caracteres!");
-                placaInput.focus();
-                return;
-            }
-
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert("Selecione o arquivo PDF do checklist!");
-                fileInput.focus();
-                return;
-            }
-
-            const file = fileInput.files[0];
             const btn = document.getElementById('btn_salvar_manual');
             btn.disabled = true;
-            btn.innerText = "Enviando...";
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
 
             const reader = new FileReader();
             reader.onload = async function() {
                 try {
                     const base64Data = reader.result.split(',')[1];
                     const payload = {
-                        placa: placa,
+                        placa: placaInput.value.trim(),
                         km_atual: kmInput.value || 0,
                         motivo_id: tipoInput.value,
-                        solicitante: solicInput.value.trim() || 'Equipe Nevada',
-                        telefone: telInput.value.trim() || '11999999999',
-                        descricao: descInput.value.trim() || 'Checklist de veículo',
+                        solicitante: solicInput.value.trim(),
+                        telefone: telInput.value.trim(),
+                        descricao: descInput.value.trim(),
                         pdf_base64: base64Data,
                         pdf_nome: file.name
                     };
 
-                    const res = await fetch('/api/receber-checklist', {
+                    const res = await fetch('/painel-nevada/upload-imediato', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -725,7 +685,10 @@
 
                     const data = await res.json();
                     if (data.isSuccess) {
-                        alert("Checklist adicionado ao painel com sucesso!");
+                        // Fecha o modal e recarrega a página instantaneamente
+                        const modalEl = document.getElementById('modalUploadManual');
+                        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                        if (modalInstance) modalInstance.hide();
                         window.location.reload();
                     } else {
                         alert("Erro ao adicionar checklist: " + (data.erro || JSON.stringify(data)));
@@ -739,6 +702,106 @@
                 }
             };
             reader.readAsDataURL(file);
+        }
+
+        function iniciarMonitoramentoCard(id) {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('/painel-nevada/status-card/' + id);
+                    const json = await res.json();
+                    if (json.isSuccess && json.status_ocr === 'concluido') {
+                        clearInterval(interval);
+                        aplicarDadosExtraidosNoCard(id, json.dados);
+                    }
+                } catch(e) {
+                    console.error("Erro ao monitorar status do card:", e);
+                }
+            }, 2500);
+        }
+
+        function aplicarDadosExtraidosNoCard(id, dados) {
+            const card = document.getElementById('card_' + id);
+            if (!card) return;
+
+            // 1. Atualiza o banner de OCR
+            const banner = document.getElementById('banner_ocr_' + id);
+            if (banner) {
+                banner.className = 'alert alert-success py-2 px-3 mb-3 d-flex align-items-center gap-2';
+                banner.innerHTML = '<strong>✓ IA concluiu a leitura da caligrafia!</strong>';
+                setTimeout(() => { banner.remove(); }, 3500);
+            }
+
+            // 2. Preenche os campos do formulário
+            if (dados.placa && dados.placa !== "NÃO IDENTIFICADA" && dados.placa !== "AGUARDANDO IA...") {
+                const inputPlaca = document.getElementById('placa_' + id);
+                if (inputPlaca) inputPlaca.value = dados.placa;
+                const headerPlaca = document.getElementById('header_placa_' + id);
+                if (headerPlaca) headerPlaca.textContent = dados.placa;
+            }
+            if (dados.km_atual) {
+                const inputKm = document.getElementById('km_' + id);
+                if (inputKm) inputKm.value = dados.km_atual;
+            }
+            if (dados.solicitante) {
+                const inputSolic = document.getElementById('solic_' + id);
+                if (inputSolic) inputSolic.value = dados.solicitante;
+            }
+            if (dados.telefone) {
+                const inputTel = document.getElementById('tel_' + id);
+                if (inputTel) inputTel.value = dados.telefone;
+            }
+            if (dados.descricao) {
+                const inputDesc = document.getElementById('desc_' + id);
+                if (inputDesc) inputDesc.value = dados.descricao;
+            }
+
+            // 3. Atualiza cabeçalho e modelo
+            const headerModelo = document.getElementById('header_modelo_' + id);
+            if (headerModelo && (dados.montadora || dados.modelo_veiculo)) {
+                headerModelo.textContent = `• ${dados.montadora} ${dados.modelo_veiculo}`;
+            }
+
+            // 4. Atualiza badge e box do cliente
+            const badge = document.getElementById('badge_tipo_' + id);
+            const boxCliente = document.getElementById('box_cliente_' + id);
+            if (dados.cliente_nome) {
+                if (badge) {
+                    badge.className = 'badge bg-light text-dark text-uppercase px-2 py-1';
+                    badge.textContent = 'Alugado';
+                }
+                if (boxCliente) {
+                    boxCliente.innerHTML = `
+                        <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Cliente Vinculado</div>
+                        <div class="fw-bold text-dark mt-1" style="font-size: 0.9rem;">
+                            ${dados.cliente_nome} ${dados.contrato_id ? '<span class="text-muted small fw-normal ms-1">(Contrato #' + dados.contrato_id + ')</span>' : ''}
+                        </div>
+                    `;
+                }
+            } else {
+                if (badge) {
+                    badge.className = 'badge bg-success text-white text-uppercase px-2 py-1';
+                    badge.textContent = 'Disponível';
+                }
+                if (boxCliente) {
+                    boxCliente.innerHTML = `
+                        <div class="text-muted text-uppercase" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;">Situação do Veículo</div>
+                        <div class="fw-bold text-success mt-1" style="font-size: 0.9rem;">
+                            Disponível
+                        </div>
+                    `;
+                }
+            }
+
+            // 5. Reativa o botão de aprovação
+            const btnAprovar = document.getElementById('btn_aprovar_' + id);
+            if (btnAprovar) {
+                btnAprovar.disabled = false;
+                btnAprovar.innerText = "Aprovar e Enviar";
+            }
+
+            // 6. Roda validações visuais em tempo real (borda verde/vermelha)
+            validarTelefone(id);
+            validarPlacaEmTempoReal(id);
         }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

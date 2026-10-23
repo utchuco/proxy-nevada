@@ -1,20 +1,79 @@
 import os
+import re
+import uuid
 import base64
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, render_template, request, send_file, jsonify
 from services.storage_service import (
     obter_checklists_pendentes,
     obter_checklist_por_id,
     remover_checklist_pendente,
+    salvar_novo_checklist_pendente,
+    atualizar_checklist_pendente,
+    salvar_pdf_checklist,
     obter_pdf_checklist_path
 )
 from services.bluefleet_service import (
     resolver_contract_item_id,
-    criar_ocorrencia_e_avancar_fila
+    criar_ocorrencia_e_avancar_fila,
+    enriquecer_dados_veiculo
 )
 from services.ocr_service import extrair_dados_checklist_pdf
 
 painel_bp = Blueprint("painel", __name__)
+
+def processar_ocr_assincrono(id_aprovacao, caminho_pdf, dados_iniciais):
+    """Executa a decifração da caligrafia com a IA em segundo plano e atualiza os dados do card."""
+    try:
+        with open(caminho_pdf, "rb") as f:
+            pdf_bytes = f.read()
+
+        dados_ia = extrair_dados_checklist_pdf(pdf_bytes) or {}
+
+        placa_informada = (dados_iniciais.get("placa") or "").strip().upper().replace("-", "").replace(" ", "")
+        placa_ia = (dados_ia.get("placa") or "").strip().upper().replace("-", "").replace(" ", "")
+        placa_final = placa_informada if (placa_informada and "AGUARDANDO" not in placa_informada) else placa_ia
+
+        dados_veiculo = {}
+        if placa_final and len(placa_final) == 7:
+            dados_veiculo = enriquecer_dados_veiculo(placa_final)
+
+        updates = {
+            "status_ocr": "concluido",
+            "placa": placa_final or "NÃO IDENTIFICADA",
+            "modelo_veiculo": dados_veiculo.get("modelo_veiculo", ""),
+            "montadora": dados_veiculo.get("montadora", ""),
+            "cliente_nome": dados_veiculo.get("cliente_nome", ""),
+            "contrato_id": dados_veiculo.get("contrato_id"),
+            "contract_item_id": dados_veiculo.get("contract_item_id")
+        }
+
+        if dados_ia.get("km_atual"):
+            updates["km_atual"] = dados_ia.get("km_atual")
+        if dados_ia.get("nome_solicitante"):
+            updates["solicitante"] = dados_ia.get("nome_solicitante")
+        if dados_ia.get("telefone_solicitante"):
+            updates["telefone"] = dados_ia.get("telefone_solicitante")
+
+        desc_atual = dados_iniciais.get("descricao") or ""
+        desc_ia = dados_ia.get("avarias_observacoes") or ""
+        if dados_ia.get("combustivel"):
+            desc_ia += (f" | Combustível: {dados_ia.get('combustivel')}" if desc_ia else f"Combustível: {dados_ia.get('combustivel')}")
+
+        if desc_ia and not desc_atual:
+            updates["descricao"] = desc_ia
+        elif desc_ia and desc_atual and desc_atual != "Checklist de veículo":
+            updates["descricao"] = f"{desc_atual} ({desc_ia})"
+        elif desc_ia:
+            updates["descricao"] = desc_ia
+
+        atualizar_checklist_pendente(id_aprovacao, updates)
+    except Exception as e:
+        print(f"Erro no processamento OCR assíncrono {id_aprovacao}: {e}")
+        atualizar_checklist_pendente(id_aprovacao, {
+            "status_ocr": "concluido"
+        })
 
 @painel_bp.route("/painel-nevada", methods=["GET"])
 def painel_nevada():
@@ -47,6 +106,88 @@ def painel_ocr_pdf():
             return jsonify({"isSuccess": False, "erro": "Não foi possível extrair dados com IA."}), 422
     except Exception as e:
         return jsonify({"isSuccess": False, "erro": str(e)}), 500
+
+@painel_bp.route("/painel-nevada/upload-imediato", methods=["POST"])
+def painel_upload_imediato():
+    dados = request.get_json(silent=True) or {}
+    pdf_base64 = dados.get("pdf_base64")
+    if not pdf_base64:
+        return jsonify({"isSuccess": False, "erro": "Arquivo PDF é obrigatório."}), 400
+
+    id_aprovacao = str(uuid.uuid4())
+    placa_bruta = str(dados.get("placa") or "").upper().strip()
+    placa_limpa = placa_bruta.replace("-", "").replace(" ", "")
+
+    pdf_nome = dados.get("pdf_nome") or f"Checklist_{id_aprovacao[:8]}.pdf"
+    if not placa_limpa:
+        m_placa = re.match(r"^([A-Za-z0-9]{7})-", pdf_nome)
+        if m_placa:
+            placa_limpa = m_placa.group(1).upper()
+
+    placa_inicial = placa_limpa if placa_limpa else "AGUARDANDO IA..."
+
+    caminho_pdf_salvo = salvar_pdf_checklist(placa_inicial, id_aprovacao, pdf_base64)
+
+    dados_veiculo = {}
+    if len(placa_inicial) == 7 and placa_inicial != "AGUARDANDO IA...":
+        dados_veiculo = enriquecer_dados_veiculo(placa_inicial)
+
+    amanha_iso = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
+
+    novo_pendente = {
+        "id_aprovacao": id_aprovacao,
+        "placa": placa_inicial,
+        "km_atual": dados.get("km_atual") or 0,
+        "tipo_veiculo": "alugado",
+        "modelo_veiculo": dados_veiculo.get("modelo_veiculo", ""),
+        "montadora": dados_veiculo.get("montadora", ""),
+        "cliente_nome": dados_veiculo.get("cliente_nome", ""),
+        "contrato_id": dados_veiculo.get("contrato_id"),
+        "contract_item_id": dados_veiculo.get("contract_item_id"),
+        "motivo_id": dados.get("motivo_id") or "CorrectiveMaintenance",
+        "motivo_classe": dados.get("motivo_classe") or "CorrectiveMaintenanceMechanicalFailure",
+        "plano_revisao_id": "149",
+        "descricao": dados.get("descricao") or "",
+        "data_agendamento": dados.get("data_agendamento") or amanha_iso,
+        "solicitante": dados.get("solicitante") or "Equipe Nevada",
+        "telefone": dados.get("telefone") or "11999999999",
+        "email": "frota@locadoranevada.com.br",
+        "leva_e_traz": False,
+        "caminho_pdf": caminho_pdf_salvo,
+        "pdf_nome": pdf_nome,
+        "data_recebimento": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "status": "Aguardando Aprovação",
+        "status_ocr": "processando"
+    }
+
+    salvar_novo_checklist_pendente(novo_pendente)
+
+    # Dispara decifração da caligrafia em segundo plano
+    t = threading.Thread(
+        target=processar_ocr_assincrono,
+        args=(id_aprovacao, caminho_pdf_salvo, dados)
+    )
+    t.daemon = True
+    t.start()
+
+    return jsonify({
+        "isSuccess": True,
+        "id_aprovacao": id_aprovacao,
+        "status_ocr": "processando",
+        "checklist": novo_pendente
+    }), 200
+
+@painel_bp.route("/painel-nevada/status-card/<id_aprovacao>", methods=["GET"])
+def obter_status_card(id_aprovacao):
+    item = obter_checklist_por_id(id_aprovacao)
+    if not item:
+        return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
+
+    return jsonify({
+        "isSuccess": True,
+        "status_ocr": item.get("status_ocr", "concluido"),
+        "dados": item
+    })
 
 @painel_bp.route("/painel-nevada/checklist-pdf/<id_aprovacao>", methods=["GET"])
 def ver_pdf_checklist(id_aprovacao):

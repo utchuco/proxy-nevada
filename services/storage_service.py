@@ -37,6 +37,19 @@ def remover_checklist_pendente(id_aprovacao):
         json.dump(nova_fila, f, ensure_ascii=False, indent=4)
     return True
 
+def atualizar_checklist_pendente(id_aprovacao, updates):
+    fila = obter_checklists_pendentes()
+    atualizado = False
+    for i, item in enumerate(fila):
+        if item.get("id_aprovacao") == id_aprovacao:
+            fila[i].update(updates)
+            atualizado = True
+            break
+    if atualizado:
+        with open(CHECKLISTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(fila, f, ensure_ascii=False, indent=4)
+    return atualizado
+
 def salvar_pdf_checklist(placa_limpa, id_aprovacao, pdf_base64):
     if not pdf_base64:
         return None
