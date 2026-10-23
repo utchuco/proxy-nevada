@@ -12,7 +12,9 @@ from services.storage_service import (
     salvar_novo_checklist_pendente,
     atualizar_checklist_pendente,
     salvar_pdf_checklist,
-    obter_pdf_checklist_path
+    obter_pdf_checklist_path,
+    salvar_pdf_pecas_gerado,
+    obter_pdf_pecas_gerado_path
 )
 from services.bluefleet_service import (
     resolver_contract_item_id,
@@ -20,6 +22,11 @@ from services.bluefleet_service import (
     enriquecer_dados_veiculo
 )
 from services.ocr_service import extrair_dados_checklist_pdf
+from services.pecas_service import (
+    extrair_dados_requisicao_pecas,
+    processar_calculos_pecas,
+    gerar_pdf_requisicao_pecas
+)
 
 painel_bp = Blueprint("painel", __name__)
 
@@ -202,6 +209,23 @@ def painel_upload_imediato():
     t.daemon = True
     t.start()
 
+    # Se enviou papel de peças junto, processa também em segundo plano
+    pecas_b64 = dados.get("pecas_pdf_base64")
+    if pecas_b64:
+        def _processar_pecas_bg(id_ap, b64_str):
+            try:
+                p_bytes = base64.b64decode(b64_str)
+                d_brutos = extrair_dados_requisicao_pecas(p_bytes)
+                if d_brutos:
+                    d_proc = processar_calculos_pecas(d_brutos)
+                    atualizar_checklist_pendente(id_ap, {"dados_pecas": d_proc})
+            except Exception as e_p:
+                print(f"Erro no processamento inicial de peças: {e_p}")
+
+        t_pecas = threading.Thread(target=_processar_pecas_bg, args=(id_aprovacao, pecas_b64))
+        t_pecas.daemon = True
+        t_pecas.start()
+
     return jsonify({
         "isSuccess": True,
         "id_aprovacao": id_aprovacao,
@@ -360,6 +384,20 @@ def painel_aprovar(id_aprovacao):
         else:
             print(f"Aviso: Checklist {id_aprovacao} aprovado sem arquivo PDF vinculado.")
 
+        # Se houver Requisição de Peças gerada, inclui automaticamente nos arquivos da ocorrência
+        caminho_pdf_pecas, nome_pecas = obter_pdf_pecas_gerado_path(id_aprovacao)
+        if caminho_pdf_pecas and os.path.exists(caminho_pdf_pecas):
+            try:
+                with open(caminho_pdf_pecas, "rb") as f_pecas:
+                    b64_pecas = base64.b64encode(f_pecas.read()).decode()
+                files_payload.append({
+                    "fileName": nome_pecas or "Requisicao_Pecas.pdf",
+                    "base64Contents": b64_pecas,
+                    "fileType": "UnidentifiedDocument"
+                })
+            except Exception as e_pec:
+                print(f"Aviso: falha ao codificar PDF de peças: {e_pec}")
+
         payload_bluefleet = {
             "contractItemRequestReasonId": motivo_id,
             "contractItemRequestReasonClassId": classe_id,
@@ -403,4 +441,105 @@ def painel_aprovar(id_aprovacao):
 def painel_rejeitar(id_aprovacao):
     remover_checklist_pendente(id_aprovacao)
     return jsonify({"isSuccess": True, "mensagem": "Checklist descartado com sucesso."}), 200
+
+@painel_bp.route("/painel-nevada/upload-pecas/<id_aprovacao>", methods=["POST"])
+def painel_upload_pecas(id_aprovacao):
+    dados = request.get_json(silent=True) or {}
+    pdf_base64 = dados.get("pdf_base64")
+    if not pdf_base64:
+        return jsonify({"isSuccess": False, "erro": "Arquivo da requisição de peças ausente."}), 400
+
+    try:
+        if "," in pdf_base64:
+            pdf_base64 = pdf_base64.split(",")[1]
+        pdf_bytes = base64.b64decode(pdf_base64)
+
+        # 1. Extração com IA (Gemini 3)
+        dados_brutos = extrair_dados_requisicao_pecas(pdf_bytes)
+        if not dados_brutos:
+            return jsonify({"isSuccess": False, "erro": "Não foi possível extrair os dados da requisição com IA."}), 422
+
+        # 2. Cálculos matemáticos exatos no Python
+        dados_processados = processar_calculos_pecas(dados_brutos)
+
+        # 3. Mescla dados existentes do checklist se a requisição não tiver algum campo
+        chk = obter_checklist_por_id(id_aprovacao)
+        if chk:
+            if not dados_processados.get("placa") or len(str(dados_processados.get("placa"))) < 7:
+                dados_processados["placa"] = chk.get("placa", "")
+            if not dados_processados.get("requisitante"):
+                dados_processados["requisitante"] = chk.get("cliente_nome") or chk.get("solicitante", "")
+            if not dados_processados.get("km"):
+                dados_processados["km"] = chk.get("km_atual", "")
+            if not dados_processados.get("veiculo"):
+                dados_processados["veiculo"] = chk.get("modelo_veiculo", "")
+
+        # 4. Salva no checklist pendente
+        atualizar_checklist_pendente(id_aprovacao, {
+            "dados_pecas": dados_processados
+        })
+
+        return jsonify({
+            "isSuccess": True,
+            "dados_pecas": dados_processados
+        }), 200
+    except Exception as e:
+        print(f"Erro ao processar requisição de peças ({id_aprovacao}): {e}")
+        return jsonify({"isSuccess": False, "erro": str(e)}), 500
+
+@painel_bp.route("/painel-nevada/gerar-pdf-pecas/<id_aprovacao>", methods=["POST"])
+def painel_gerar_pdf_pecas(id_aprovacao):
+    dados_req = request.get_json(silent=True) or {}
+    chk = obter_checklist_por_id(id_aprovacao)
+    if not chk:
+        return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
+
+    dados_pecas = chk.get("dados_pecas") or {}
+    # Atualiza dados informados na tela (ex: número da OC digitado pelo usuário)
+    if dados_req.get("oc_num"):
+        dados_pecas["oc_num"] = str(dados_req.get("oc_num")).strip()
+    if dados_req.get("data"):
+        dados_pecas["data"] = str(dados_req.get("data")).strip()
+    if dados_req.get("placa"):
+        dados_pecas["placa"] = str(dados_req.get("placa")).strip()
+    if dados_req.get("km"):
+        dados_pecas["km"] = str(dados_req.get("km")).strip()
+    if dados_req.get("veiculo"):
+        dados_pecas["veiculo"] = str(dados_req.get("veiculo")).strip()
+    if dados_req.get("requisitante"):
+        dados_pecas["requisitante"] = str(dados_req.get("requisitante")).strip()
+
+    try:
+        # Gera o PDF limpo
+        pdf_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
+        oc_salvar = dados_pecas.get("oc_num") or f"121471_{chk.get('placa', '')}"
+        caminho_salvo, nome_arquivo = salvar_pdf_pecas_gerado(id_aprovacao, oc_salvar, pdf_bytes)
+
+        dados_pecas["caminho_pdf_gerado"] = caminho_salvo
+        dados_pecas["nome_pdf_gerado"] = nome_arquivo
+
+        atualizar_checklist_pendente(id_aprovacao, {
+            "dados_pecas": dados_pecas
+        })
+
+        return jsonify({
+            "isSuccess": True,
+            "nome_arquivo": nome_arquivo,
+            "url_download": f"/painel-nevada/download-pdf-pecas/{id_aprovacao}"
+        }), 200
+    except Exception as e:
+        print(f"Erro ao gerar PDF da requisição de peças: {e}")
+        return jsonify({"isSuccess": False, "erro": str(e)}), 500
+
+@painel_bp.route("/painel-nevada/download-pdf-pecas/<id_aprovacao>", methods=["GET"])
+def painel_download_pdf_pecas(id_aprovacao):
+    caminho_pdf, nome_arquivo = obter_pdf_pecas_gerado_path(id_aprovacao)
+    if caminho_pdf and os.path.exists(caminho_pdf):
+        return send_file(
+            caminho_pdf,
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=nome_arquivo or "Requisicao_Pecas.pdf"
+        )
+    return jsonify({"isSuccess": False, "erro": "PDF da requisição de peças não encontrado."}), 404
 

@@ -321,6 +321,7 @@ async function enviarChecklistManual() {
     }
 
     const file = fileInput.files[0];
+    const pecasFileInput = document.getElementById('manual_pdf_pecas');
     const placaInput = document.getElementById('manual_placa');
     const kmInput = document.getElementById('manual_km');
     const tipoInput = document.getElementById('manual_tipo');
@@ -332,46 +333,54 @@ async function enviarChecklistManual() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
 
-    const reader = new FileReader();
-    reader.onload = async function() {
-        try {
-            const base64Data = reader.result.split(',')[1];
-            const payload = {
-                placa: placaInput.value.trim(),
-                km_atual: kmInput.value || 0,
-                motivo_id: tipoInput.value,
-                solicitante: solicInput.value.trim(),
-                telefone: telInput.value.trim(),
-                descricao: descInput.value.trim(),
-                pdf_base64: base64Data,
-                pdf_nome: file.name
-            };
+    const toBase64 = f => new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.readAsDataURL(f);
+        r.onload = () => resolve(r.result.split(',')[1]);
+        r.onerror = error => reject(error);
+    });
 
-            const res = await fetch('/painel-nevada/upload-imediato', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+    try {
+        const base64Data = await toBase64(file);
+        let pecasBase64 = null;
+        if (pecasFileInput && pecasFileInput.files && pecasFileInput.files.length > 0) {
+            pecasBase64 = await toBase64(pecasFileInput.files[0]);
+        }
 
-            const data = await res.json();
-            if (data.isSuccess) {
-                // Fecha o modal e recarrega a página instantaneamente
-                const modalEl = document.getElementById('modalUploadManual');
-                const modalInstance = bootstrap.Modal.getInstance(modalEl);
-                if (modalInstance) modalInstance.hide();
-                window.location.reload();
-            } else {
-                alert("Erro ao adicionar checklist: " + (data.erro || JSON.stringify(data)));
-                btn.disabled = false;
-                btn.innerText = "Adicionar ao Painel";
-            }
-        } catch(err) {
-            alert("Erro ao enviar: " + err);
+        const payload = {
+            placa: placaInput.value.trim(),
+            km_atual: kmInput.value || 0,
+            motivo_id: tipoInput.value,
+            solicitante: solicInput.value.trim(),
+            telefone: telInput.value.trim(),
+            descricao: descInput.value.trim(),
+            pdf_base64: base64Data,
+            pdf_nome: file.name,
+            pecas_pdf_base64: pecasBase64
+        };
+
+        const res = await fetch('/painel-nevada/upload-imediato', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.isSuccess) {
+            const modalEl = document.getElementById('modalUploadManual');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+            window.location.reload();
+        } else {
+            alert("Erro ao adicionar checklist: " + (data.erro || JSON.stringify(data)));
             btn.disabled = false;
             btn.innerText = "Adicionar ao Painel";
         }
-    };
-    reader.readAsDataURL(file);
+    } catch(err) {
+        alert("Erro ao enviar: " + err);
+        btn.disabled = false;
+        btn.innerText = "Adicionar ao Painel";
+    }
 }
 
 function iniciarMonitoramentoCard(id) {
@@ -480,6 +489,106 @@ function aplicarDadosExtraidosNoCard(id, dados) {
     // 6. Roda validações visuais em tempo real (borda verde/vermelha)
     validarTelefone(id);
     validarPlacaEmTempoReal(id);
+}
+
+// --- FUNÇÕES DA REQUISIÇÃO DE PEÇAS ---
+async function subirPapelPecas(id) {
+    const input = document.getElementById('input_pecas_' + id);
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const statusEl = document.getElementById('status_pecas_' + id);
+    const boxEl = document.getElementById('box_pecas_' + id);
+    const badgeTotal = document.getElementById('badge_pecas_total_' + id);
+    const listaItens = document.getElementById('lista_itens_pecas_' + id);
+    const ocInput = document.getElementById('oc_input_' + id);
+
+    if (statusEl) {
+        statusEl.className = 'small text-primary mb-2 fw-semibold';
+        statusEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> IA decifrando e calculando peças...';
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function() {
+        try {
+            const base64Data = reader.result;
+            const res = await fetch('/painel-nevada/upload-pecas/' + id, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pdf_base64: base64Data })
+            });
+
+            const data = await res.json();
+            if (data.isSuccess && data.dados_pecas) {
+                const pecas = data.dados_pecas;
+                if (statusEl) statusEl.className = 'd-none';
+
+                // Renderiza itens
+                if (listaItens && pecas.itens) {
+                    listaItens.innerHTML = pecas.itens.map(p => `
+                        <div class="d-flex justify-content-between border-bottom py-1">
+                            <span><b>${p.quantidade_formatada}x</b> ${p.descricao}</span>
+                        </div>
+                    `).join('');
+                }
+
+                // Atualiza badge de total
+                if (badgeTotal && pecas.total_geral_formatado) {
+                    badgeTotal.textContent = pecas.total_geral_formatado;
+                    badgeTotal.className = 'badge bg-success';
+                }
+
+                // Preenche OC se a IA detectou
+                if (ocInput && pecas.oc_num && !ocInput.value) {
+                    ocInput.value = pecas.oc_num;
+                }
+
+                if (boxEl) boxEl.classList.remove('d-none');
+            } else {
+                if (statusEl) {
+                    statusEl.className = 'small text-danger mb-2';
+                    statusEl.textContent = 'Erro ao ler peças: ' + (data.erro || 'Falha na leitura');
+                }
+            }
+        } catch(err) {
+            if (statusEl) {
+                statusEl.className = 'small text-danger mb-2';
+                statusEl.textContent = 'Erro no envio: ' + err;
+            }
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+async function gerarPdfPecas(id) {
+    const ocInput = document.getElementById('oc_input_' + id);
+    const ocVal = ocInput ? ocInput.value.trim() : '';
+    const btnVer = document.getElementById('btn_ver_pdf_pecas_' + id);
+    const nomePdfEl = document.getElementById('nome_pdf_pecas_' + id);
+
+    try {
+        const res = await fetch('/painel-nevada/gerar-pdf-pecas/' + id, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oc_num: ocVal })
+        });
+
+        const data = await res.json();
+        if (data.isSuccess) {
+            if (btnVer) {
+                btnVer.classList.remove('d-none');
+                btnVer.href = data.url_download + '?t=' + new Date().getTime();
+            }
+            if (nomePdfEl && data.nome_arquivo) {
+                nomePdfEl.textContent = data.nome_arquivo;
+            }
+            window.open(data.url_download, '_blank');
+        } else {
+            alert('Erro ao gerar PDF: ' + (data.erro || 'Desconhecido'));
+        }
+    } catch(e) {
+        alert('Erro ao solicitar PDF: ' + e);
+    }
 }
 
 // Inicializa cada card com sua respectiva classe inicial e validações

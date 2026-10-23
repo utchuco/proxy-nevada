@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import base64
 import threading
@@ -15,6 +16,7 @@ CHECKLISTS_FILE = os.path.join(BASE_DIR, "checklists_pendentes.json")
 LOCK_FILE = os.path.join(BASE_DIR, "checklists_pendentes.lock")
 CACHE_PLACAS_FILE = os.path.join(BASE_DIR, "placas_cache.json")
 PASTA_CHECKLISTS_PDF = os.path.join(BASE_DIR, "documentos", "checklists_recebidos")
+PASTA_PECAS_PDF = os.path.join(BASE_DIR, "documentos", "pecas_requisicoes")
 
 _storage_lock = threading.Lock()
 
@@ -149,4 +151,25 @@ def buscar_sugestoes_placas(termo_busca, limite=50):
     except Exception as e:
         print(f"Erro ao ler cache de sugestões: {e}")
         return []
+
+def salvar_pdf_pecas_gerado(id_aprovacao, oc_num, pdf_bytes):
+    try:
+        os.makedirs(PASTA_PECAS_PDF, exist_ok=True)
+        nome_limpo = re.sub(r'[^\w\-]', '_', oc_num or f"ReqPecas_{id_aprovacao[:8]}")
+        nome_arquivo = f"{nome_limpo}.pdf"
+        caminho_completo = os.path.join(PASTA_PECAS_PDF, nome_arquivo)
+        with open(caminho_completo, "wb") as f:
+            f.write(pdf_bytes)
+        return caminho_completo, nome_arquivo
+    except Exception as e:
+        print(f"Erro ao salvar PDF de peças gerado: {e}")
+        return None, None
+
+def obter_pdf_pecas_gerado_path(id_aprovacao):
+    item = obter_checklist_por_id(id_aprovacao)
+    if item and item.get("dados_pecas"):
+        caminho = item["dados_pecas"].get("caminho_pdf_gerado")
+        if caminho and os.path.exists(caminho):
+            return caminho, item["dados_pecas"].get("nome_pdf_gerado")
+    return None, None
 
