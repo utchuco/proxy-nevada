@@ -279,12 +279,15 @@
                                         </div>
                                     </div>
 
-                                    <div class="input-group input-group-sm mb-2">
+                                    <div class="input-group input-group-sm mb-1">
                                         <span class="input-group-text fw-bold text-danger">O.C nº</span>
-                                        <input type="text" class="form-control fw-bold" id="oc_input_{{ item.id_aprovacao }}" placeholder="ex: 121471 ou OC-121471" value="{{ item.dados_pecas.oc_num if item.dados_pecas else '' }}">
-                                        <button class="btn btn-danger btn-sm fw-bold" onclick="gerarPdfPecas('{{ item.id_aprovacao }}')">
-                                            Gerar PDF
+                                        <input type="text" class="form-control fw-bold" id="oc_input_{{ item.id_aprovacao }}" placeholder="Automática ao aprovar" value="{{ item.dados_pecas.oc_num if item.dados_pecas else '' }}">
+                                        <button class="btn btn-outline-danger btn-sm fw-bold" onclick="gerarPdfPecas('{{ item.id_aprovacao }}')">
+                                            Ver PDF
                                         </button>
+                                    </div>
+                                    <div class="text-muted mb-2" style="font-size: 0.70rem;">
+                                        ⚡ A O.C será gerada pela Blue Fleet e inserida no PDF automaticamente na aprovação.
                                     </div>
 
                                     <a id="btn_ver_pdf_pecas_{{ item.id_aprovacao }}" href="/painel-nevada/download-pdf-pecas/{{ item.id_aprovacao }}" target="_blank" class="btn btn-sm btn-outline-success w-100 py-1 d-flex align-items-center justify-content-center gap-1 {% if not item.dados_pecas or not item.dados_pecas.caminho_pdf_gerado %}d-none{% endif %}">

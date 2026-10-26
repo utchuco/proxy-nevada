@@ -660,3 +660,99 @@ def criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_is
         return True, req_id, None
     else:
         return False, None, resp_bf.text
+
+def lancar_ordem_servico_pecas(contract_item_request_id, km_atual, itens_pecas, provider_id=197):
+    """
+    Lança a Ordem de Serviço de Peças na Blue Fleet com os itens requisitados
+    (Padrão Nevada: Peças, Padrão, Produto e Despesa).
+    Retorna (sucesso, purchase_order_number, os_number, erro).
+    """
+    token = get_access_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    try:
+        km_limpo = int(re.sub(r"[^\d]", "", str(km_atual or 0)))
+    except Exception:
+        km_limpo = 0
+
+    order_items_payload = []
+    for item in itens_pecas:
+        try:
+            qtd = float(item.get("quantidade", 1))
+        except Exception:
+            qtd = 1.0
+
+        try:
+            unit = float(item.get("valor_unitario", 0))
+        except Exception:
+            unit = 0.0
+
+        desc = str(item.get("descricao", "")).strip().upper()
+
+        order_items_payload.append({
+            "expenseGroupId": 7,                              # 01.01.02 - Peças
+            "orderItemClassId": 1,                            # Default (PADRÃO)
+            "contractItemRequestOrderItemPartTypeId": 2,      # Part (PRODUTO)
+            "expenseTypeId": 1,                               # Expense (DESPESA)
+            "quantity": qtd,
+            "unitPrice": unit,
+            "discount": 0.0,
+            "description": desc
+        })
+
+    if not order_items_payload:
+        return False, None, None, "Nenhum item de peça para lançar."
+
+    payload = {
+        "providerId": provider_id,
+        "odometer": km_limpo,
+        "orderItems": order_items_payload
+    }
+
+    url_order = f"{API_URL}/contract-item-request/{contract_item_request_id}/order"
+    resp = requests.post(url_order, headers=headers, json=payload, timeout=15)
+
+    if resp.status_code in [200, 201]:
+        dados_resp = resp.json().get("data", resp.json())
+        ord_id = dados_resp.get("contractItemRequestOrderId") or dados_resp.get("id")
+        os_number = dados_resp.get("orderNumber")
+        oc_number = dados_resp.get("purchaseOrderNumber")
+
+        # Se o número da O.C ainda não veio diretamente no retorno, busca os detalhes da ordem
+        if not oc_number and ord_id:
+            try:
+                time.sleep(1)
+                r_det = requests.get(f"{API_URL}/contract-item-request/{contract_item_request_id}/order/{ord_id}", headers=headers, timeout=10)
+                if r_det.status_code == 200:
+                    det = r_det.json().get("data", {})
+                    oc_number = det.get("purchaseOrderNumber")
+                    os_number = os_number or det.get("orderNumber")
+            except Exception as e_det:
+                print(f"Aviso ao consultar detalhes da ordem de serviço: {e_det}")
+
+        return True, oc_number, os_number, None
+    else:
+        return False, None, None, resp.text
+
+def anexar_arquivo_ocorrencia(contract_item_request_id, nome_arquivo, pdf_bytes):
+    """Anexa um documento PDF diretamente na ocorrência da Blue Fleet."""
+    token = get_access_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    b64_doc = base64.b64encode(pdf_bytes).decode("utf-8")
+    payload = {
+        "fileName": nome_arquivo,
+        "base64Document": b64_doc
+    }
+
+    url_file = f"{API_URL}/contract-item-request/{contract_item_request_id}/file"
+    resp = requests.post(url_file, headers=headers, json=payload, timeout=15)
+    return resp.status_code in [200, 201], resp.text

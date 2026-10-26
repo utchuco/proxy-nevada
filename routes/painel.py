@@ -19,7 +19,9 @@ from services.storage_service import (
 from services.bluefleet_service import (
     resolver_contract_item_id,
     criar_ocorrencia_e_avancar_fila,
-    enriquecer_dados_veiculo
+    enriquecer_dados_veiculo,
+    lancar_ordem_servico_pecas,
+    anexar_arquivo_ocorrencia
 )
 from services.ocr_service import extrair_dados_checklist_pdf
 from services.pecas_service import (
@@ -424,11 +426,44 @@ def painel_aprovar(id_aprovacao):
         sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_iso)
 
         if sucesso:
+            # 6. Se houver requisição de peças, lança a Ordem de Serviço de Peças na Blue Fleet
+            dados_pecas = checklist_alvo.get("dados_pecas") or {}
+            itens_pecas = dados_pecas.get("itens") or []
+            oc_gerada = None
+
+            if itens_pecas:
+                ok_ord, oc_num, os_num, err_ord = lancar_ordem_servico_pecas(req_id, km_atual, itens_pecas)
+                if ok_ord and oc_num:
+                    oc_gerada = oc_num
+                    dados_pecas["oc_num"] = oc_num
+                    if not dados_pecas.get("placa"):
+                        dados_pecas["placa"] = placa_limpa
+                    if not dados_pecas.get("km"):
+                        dados_pecas["km"] = km_atual
+                    if not dados_pecas.get("requisitante"):
+                        dados_pecas["requisitante"] = cliente_nome or solicitante
+
+                    try:
+                        pdf_pecas_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
+                        nome_pdf_oc = f"{oc_num}.pdf"
+                        salvar_pdf_pecas_gerado(id_aprovacao, oc_num, pdf_pecas_bytes)
+                        # Anexa o PDF preenchido com a OC oficial na ocorrência da Blue Fleet
+                        anexar_arquivo_ocorrencia(req_id, nome_pdf_oc, pdf_pecas_bytes)
+                    except Exception as e_pdf_oc:
+                        print(f"Aviso ao gerar e anexar PDF de peças com OC {oc_num}: {e_pdf_oc}")
+                elif err_ord:
+                    print(f"Aviso ao lançar ordem de serviço de peças na Blue Fleet: {err_ord}")
+
             remover_checklist_pendente(id_aprovacao)
+            msg_sucesso = f"Ocorrência criada com sucesso para a placa {placa_api}!"
+            if oc_gerada:
+                msg_sucesso += f" Ordem de Compra gerada e vinculada: {oc_gerada}"
+
             return jsonify({
                 "isSuccess": True,
-                "mensagem": f"Ocorrência criada com sucesso para a placa {placa_api}!",
-                "contractItemRequestId": req_id
+                "mensagem": msg_sucesso,
+                "contractItemRequestId": req_id,
+                "purchaseOrderNumber": oc_gerada
             }), 200
         else:
             return jsonify({"isSuccess": False, "erro": f"Blue Fleet recusou: {erro_bf}"}), 400

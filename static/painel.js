@@ -222,7 +222,11 @@ async function aprovarChecklist(id) {
         const data = await response.json();
         
         if (data.isSuccess) {
-            alert("Sucesso! Ocorrência criada na Blue Fleet: ID " + data.contractItemRequestId);
+            let msg = "Sucesso! Ocorrência criada na Blue Fleet: ID " + data.contractItemRequestId;
+            if (data.purchaseOrderNumber) {
+                msg += "\nOrdem de Compra gerada: " + data.purchaseOrderNumber;
+            }
+            alert(msg);
             document.getElementById('card_' + id)?.remove();
         } else {
             alert("Erro da Blue Fleet: " + (data.erro || JSON.stringify(data)));
