@@ -193,6 +193,8 @@ async function aprovarChecklist(id) {
 
     if (!confirm("Confirmar envio para a Blue Fleet?")) return;
 
+    const itensPecas = coletarItensPecasDoCard(id);
+
     const payload = {
         placa: document.getElementById('placa_' + id).value.trim(),
         km_atual: document.getElementById('km_' + id).value,
@@ -203,7 +205,8 @@ async function aprovarChecklist(id) {
         solicitante: document.getElementById('solic_' + id).value.trim(),
         telefone: document.getElementById('tel_' + id).value.trim(),
         leva_e_traz: document.getElementById('leva_traz_' + id).value,
-        sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es'
+        sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es',
+        itens_pecas: itensPecas
     };
 
     const btnAprovar = document.querySelector('#card_' + id + ' .btn-approve');
@@ -496,6 +499,91 @@ function aplicarDadosExtraidosNoCard(id, dados) {
 }
 
 // --- FUNÇÕES DA REQUISIÇÃO DE PEÇAS ---
+function coletarItensPecasDoCard(id) {
+    const lista = document.getElementById('lista_itens_pecas_' + id);
+    if (!lista) return [];
+    const linhas = lista.querySelectorAll('.row-peca');
+    const itens = [];
+    linhas.forEach(row => {
+        const inputQtd = row.querySelector('.peca-qtd');
+        const inputDesc = row.querySelector('.peca-desc');
+        const inputPreco = row.querySelector('.peca-preco');
+        if (!inputDesc) return;
+
+        const qtdStr = (inputQtd ? inputQtd.value : '1').replace(',', '.').trim();
+        const precoStr = (inputPreco ? inputPreco.value : '0').replace('R$', '').replace('$', '').replace(',', '.').trim();
+        const descStr = inputDesc.value.trim().toUpperCase();
+
+        const qtd = parseFloat(qtdStr) || 1.0;
+        const unit = parseFloat(precoStr) || 0.0;
+
+        if (descStr) {
+            itens.push({
+                quantidade: qtd,
+                descricao: descStr,
+                valor_unitario: unit
+            });
+        }
+    });
+    return itens;
+}
+
+function recalcularPecasCard(id) {
+    const lista = document.getElementById('lista_itens_pecas_' + id);
+    if (!lista) return;
+    const badgeTotal = document.getElementById('badge_pecas_total_' + id);
+    const linhas = lista.querySelectorAll('.row-peca');
+    let totalGeral = 0.0;
+
+    linhas.forEach(row => {
+        const inputQtd = row.querySelector('.peca-qtd');
+        const inputPreco = row.querySelector('.peca-preco');
+        const spanSubtotal = row.querySelector('.peca-subtotal');
+
+        const qtdStr = (inputQtd ? inputQtd.value : '1').replace(',', '.').trim();
+        const precoStr = (inputPreco ? inputPreco.value : '0').replace('R$', '').replace('$', '').replace(',', '.').trim();
+
+        const qtd = parseFloat(qtdStr) || 1.0;
+        const unit = parseFloat(precoStr) || 0.0;
+        const subtotal = Math.round(qtd * unit * 100) / 100;
+        totalGeral += subtotal;
+
+        if (spanSubtotal) {
+            spanSubtotal.textContent = 'R$ ' + subtotal.toFixed(2).replace('.', ',');
+        }
+    });
+
+    if (badgeTotal) {
+        badgeTotal.textContent = 'R$ ' + totalGeral.toFixed(2).replace('.', ',');
+        badgeTotal.classList.remove('d-none');
+    }
+}
+
+function adicionarLinhaPeca(id) {
+    const lista = document.getElementById('lista_itens_pecas_' + id);
+    if (!lista) return;
+
+    const div = document.createElement('div');
+    div.className = 'row-peca d-flex align-items-center gap-1 mb-1';
+    div.innerHTML = `
+        <input type="text" class="form-control form-control-sm text-center fw-bold peca-qtd" style="width: 45px; font-size: 0.78rem; padding: 2px 4px;" value="1" oninput="recalcularPecasCard('${id}')">
+        <input type="text" class="form-control form-control-sm peca-desc" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Nome da peça" oninput="recalcularPecasCard('${id}')">
+        <input type="text" class="form-control form-control-sm text-end peca-preco" style="width: 65px; font-size: 0.78rem; padding: 2px 4px;" value="0.00" oninput="recalcularPecasCard('${id}')">
+        <span class="peca-subtotal text-end fw-bold text-dark" style="width: 65px; font-size: 0.78rem;">R$ 0,00</span>
+        <button type="button" class="btn btn-link text-danger p-0" style="width: 20px; text-decoration: none;" onclick="removerLinhaPeca('${id}', this)">✕</button>
+    `;
+    lista.appendChild(div);
+    recalcularPecasCard(id);
+}
+
+function removerLinhaPeca(id, btn) {
+    const row = btn.closest('.row-peca');
+    if (row) {
+        row.remove();
+        recalcularPecasCard(id);
+    }
+}
+
 async function subirPapelPecas(id) {
     const input = document.getElementById('input_pecas_' + id);
     if (!input.files || input.files.length === 0) return;
@@ -527,11 +615,15 @@ async function subirPapelPecas(id) {
                 const pecas = data.dados_pecas;
                 if (statusEl) statusEl.className = 'd-none';
 
-                // Renderiza itens
+                // Renderiza itens em tabela interativa editável
                 if (listaItens && pecas.itens) {
                     listaItens.innerHTML = pecas.itens.map(p => `
-                        <div class="d-flex justify-content-between border-bottom py-1">
-                            <span><b>${p.quantidade_formatada}x</b> ${p.descricao}</span>
+                        <div class="row-peca d-flex align-items-center gap-1 mb-1">
+                            <input type="text" class="form-control form-control-sm text-center fw-bold peca-qtd" style="width: 45px; font-size: 0.78rem; padding: 2px 4px;" value="${p.quantidade_formatada || p.quantidade}" oninput="recalcularPecasCard('${id}')">
+                            <input type="text" class="form-control form-control-sm peca-desc" style="font-size: 0.78rem; padding: 2px 6px;" value="${p.descricao_pura || p.descricao}" oninput="recalcularPecasCard('${id}')">
+                            <input type="text" class="form-control form-control-sm text-end peca-preco" style="width: 65px; font-size: 0.78rem; padding: 2px 4px;" value="${(p.valor_unitario || 0).toFixed(2)}" oninput="recalcularPecasCard('${id}')">
+                            <span class="peca-subtotal text-end fw-bold text-dark" style="width: 65px; font-size: 0.78rem;">${p.subtotal_formatado || 'R$ 0,00'}</span>
+                            <button type="button" class="btn btn-link text-danger p-0" style="width: 20px; text-decoration: none;" onclick="removerLinhaPeca('${id}', this)">✕</button>
                         </div>
                     `).join('');
                 }
@@ -569,12 +661,13 @@ async function gerarPdfPecas(id) {
     const ocVal = ocInput ? ocInput.value.trim() : '';
     const btnVer = document.getElementById('btn_ver_pdf_pecas_' + id);
     const nomePdfEl = document.getElementById('nome_pdf_pecas_' + id);
+    const itensPecas = coletarItensPecasDoCard(id);
 
     try {
         const res = await fetch('/painel-nevada/gerar-pdf-pecas/' + id, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oc_num: ocVal })
+            body: JSON.stringify({ oc_num: ocVal, itens: itensPecas })
         });
 
         const data = await res.json();

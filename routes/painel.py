@@ -63,9 +63,16 @@ def processar_ocr_assincrono(id_aprovacao, caminho_pdf, dados_iniciais):
 
         dados_ia = extrair_dados_checklist_pdf(pdf_bytes) or {}
 
-        placa_informada = (dados_iniciais.get("placa") or "").strip().upper().replace("-", "").replace(" ", "")
+        chk_atual = obter_checklist_por_id(id_aprovacao)
+        placa_existente = (chk_atual.get("placa") if chk_atual else "") or (dados_iniciais.get("placa") or "")
+        placa_informada = placa_existente.strip().upper().replace("-", "").replace(" ", "")
         placa_ia = (dados_ia.get("placa") or "").strip().upper().replace("-", "").replace(" ", "")
-        placa_final = placa_informada if (placa_informada and "AGUARDANDO" not in placa_informada) else placa_ia
+        
+        # Se a placa já foi identificada no nome do arquivo ou informada, NUNCA busca nem sobrescreve pela IA
+        if placa_informada and len(placa_informada) == 7 and "AGUARDANDO" not in placa_informada:
+            placa_final = placa_informada
+        else:
+            placa_final = placa_ia or placa_informada
 
         dados_veiculo = {}
         if placa_final and len(placa_final) == 7:
@@ -163,6 +170,8 @@ def painel_upload_imediato():
             placa_limpa = m_placa.group(1).upper()
 
     placa_inicial = placa_limpa if placa_limpa else "AGUARDANDO IA..."
+    if placa_inicial != "AGUARDANDO IA...":
+        dados["placa"] = placa_inicial
 
     caminho_pdf_salvo = salvar_pdf_checklist(placa_inicial, id_aprovacao, pdf_base64)
 
@@ -333,6 +342,11 @@ def painel_aprovar(id_aprovacao):
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
 
         # 4. Bloco de Manutenção oficial
+        # Data segura para a Blue Fleet aceitar (hoje/agora)
+        # A Blue Fleet não aceita agendamento nem check-in no passado.
+        data_valida_bluefleet = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+        # 4. Bloco de Manutenção oficial
         bloco_manutencao = {
             "currentOdometer": km_atual,
             "description": descricao,
@@ -345,32 +359,19 @@ def painel_aprovar(id_aprovacao):
             "requesterName": solicitante,
             "requesterPhone": telefone,
             "requesterEmail": email,
-            "pickupDate": data_iso,
-            "scheduling1": data_iso
+            "pickupDate": data_valida_bluefleet,
+            "scheduling1": data_valida_bluefleet
         }
 
-        # Anexa PDF do checklist se existir fisicamente, garantindo padrão estrito PLACA-DD.MM.YY-TIPO.pdf
+        # Anexa PDF do checklist com o nome EXATAMENTE igual ao que o usuário enviou
+        # preservando a data histórica original colocada pelo robô
         files_payload = []
         caminho_pdf = checklist_alvo.get("caminho_pdf")
         if caminho_pdf and os.path.exists(caminho_pdf):
             try:
-                # Extrai formato DD.MM.AA a partir da data informada/editada
-                try:
-                    dt_parts = data_iso[:10].split("-")
-                    data_formatada_pdf = f"{dt_parts[2]}.{dt_parts[1]}.{dt_parts[0][2:]}"
-                except Exception:
-                    data_formatada_pdf = datetime.now().strftime("%d.%m.%y")
-
-                # Detecta ou usa o tipo escolhido (es, e ou s)
-                sufixo_tipo = edicoes.get("sufixo_tipo") or checklist_alvo.get("sufixo_tipo")
-                if not sufixo_tipo:
-                    nome_original = str(checklist_alvo.get("pdf_nome") or "")
-                    match_tipo = re.search(r'-(es|e|s)(?:\.pdf)?$', nome_original, re.IGNORECASE)
-                    sufixo_tipo = match_tipo.group(1).lower() if match_tipo else "es"
-                else:
-                    sufixo_tipo = str(sufixo_tipo).lower().strip()
-
-                nome_arquivo_final = f"{placa_limpa}-{data_formatada_pdf}-{sufixo_tipo}.pdf"
+                nome_arquivo_final = checklist_alvo.get("pdf_nome") or os.path.basename(caminho_pdf)
+                if not nome_arquivo_final.lower().endswith(".pdf"):
+                    nome_arquivo_final += ".pdf"
 
                 with open(caminho_pdf, "rb") as f_pdf:
                     b64_pdf = base64.b64encode(f_pdf.read()).decode()
@@ -422,12 +423,18 @@ def painel_aprovar(id_aprovacao):
             payload_bluefleet["hasDefaultMaintenancePlan"] = True
             payload_bluefleet["maintenancePlanRevisionId"] = "149"
 
-        # 5. Envio e avanço automático da fila na Blue Fleet
-        sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_iso)
+        # 5. Envio e avanço automático da fila na Blue Fleet com data garantida válida
+        sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_valida_bluefleet)
 
         if sucesso:
             # 6. Se houver requisição de peças, lança a Ordem de Serviço de Peças na Blue Fleet
             dados_pecas = checklist_alvo.get("dados_pecas") or {}
+            # Se o usuário editou a lista de peças no card, usa a lista atualizada
+            if edicoes.get("itens_pecas"):
+                dados_pecas["itens"] = edicoes.get("itens_pecas")
+                dados_pecas = processar_calculos_pecas(dados_pecas)
+                atualizar_checklist_pendente(id_aprovacao, {"dados_pecas": dados_pecas})
+
             itens_pecas = dados_pecas.get("itens") or []
             oc_gerada = None
 
@@ -530,6 +537,11 @@ def painel_gerar_pdf_pecas(id_aprovacao):
         return jsonify({"isSuccess": False, "erro": "Checklist não encontrado."}), 404
 
     dados_pecas = chk.get("dados_pecas") or {}
+    # Atualiza lista de itens caso o usuário tenha editado manualmente na tela
+    if dados_req.get("itens") is not None:
+        dados_pecas["itens"] = dados_req.get("itens")
+        dados_pecas = processar_calculos_pecas(dados_pecas)
+
     # Atualiza dados informados na tela (ex: número da OC digitado pelo usuário)
     if dados_req.get("oc_num"):
         dados_pecas["oc_num"] = str(dados_req.get("oc_num")).strip()

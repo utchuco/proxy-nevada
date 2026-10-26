@@ -144,14 +144,15 @@ def processar_calculos_pecas(dados_brutos):
             qtd_fmt = f"{qtd}".replace(".", ",")
 
         desc_base = str(item.get("descricao", "")).strip().upper()
-        # Limpa resíduos de cálculos antigos se houver
+        # Limpa cálculos e valores antigos da descrição para permitir edição manual limpa
         desc_limpa = re.sub(r"\s*:\s*R\$\s*[\d\.,]+.*$", "", desc_base, flags=re.IGNORECASE).strip()
+        desc_pura = re.sub(r"\s*\$\s*[\d\.,]+.*$", "", desc_limpa).strip()
 
         # Garante a presença do valor unitário na descrição ($ 28,20)
-        if "$" not in desc_limpa and unitario > 0:
-            desc_com_unit = f"{desc_limpa} $ {unitario_fmt}"
+        if unitario > 0:
+            desc_com_unit = f"{desc_pura} $ {unitario_fmt}"
         else:
-            desc_com_unit = desc_limpa
+            desc_com_unit = desc_pura
 
         # Regra 3 do usuário: em todos que for maior ou menor que um, coloca ': R$ total'
         if abs(qtd - 1.0) > 0.001:
@@ -162,6 +163,7 @@ def processar_calculos_pecas(dados_brutos):
         itens_processados.append({
             "quantidade": qtd,
             "quantidade_formatada": qtd_fmt,
+            "descricao_pura": desc_pura,
             "descricao": desc_final,
             "valor_unitario": unitario,
             "valor_unitario_formatado": f"R$ {unitario_fmt}",

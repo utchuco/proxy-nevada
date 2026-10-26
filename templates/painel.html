@@ -267,16 +267,30 @@
                                 </div>
 
                                 <div id="box_pecas_{{ item.id_aprovacao }}" class="{% if not item.dados_pecas %}d-none{% endif %}">
-                                    <div class="bg-white p-2 rounded border mb-2" style="max-height: 140px; overflow-y: auto;">
+                                    <div class="bg-white p-2 rounded border mb-2" style="max-height: 220px; overflow-y: auto;">
+                                        <div class="d-flex justify-content-between align-items-center mb-1 text-muted" style="font-size: 0.70rem; font-weight: 700;">
+                                            <span style="width: 45px;">QTD</span>
+                                            <span class="flex-grow-1 ms-2">PEÇA / DESCRIÇÃO</span>
+                                            <span style="width: 65px;" class="text-end">UNIT (R$)</span>
+                                            <span style="width: 65px;" class="text-end">SUBTOTAL</span>
+                                            <span style="width: 22px;"></span>
+                                        </div>
                                         <div id="lista_itens_pecas_{{ item.id_aprovacao }}" class="small">
                                             {% if item.dados_pecas and item.dados_pecas.itens %}
                                                 {% for p in item.dados_pecas.itens %}
-                                                    <div class="d-flex justify-content-between border-bottom py-1">
-                                                        <span><b>{{ p.quantidade_formatada }}x</b> {{ p.descricao }}</span>
+                                                    <div class="row-peca d-flex align-items-center gap-1 mb-1">
+                                                        <input type="text" class="form-control form-control-sm text-center fw-bold peca-qtd" style="width: 45px; font-size: 0.78rem; padding: 2px 4px;" value="{{ p.quantidade_formatada }}" oninput="recalcularPecasCard('{{ item.id_aprovacao }}')">
+                                                        <input type="text" class="form-control form-control-sm peca-desc" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ p.descricao_pura or p.descricao }}" oninput="recalcularPecasCard('{{ item.id_aprovacao }}')">
+                                                        <input type="text" class="form-control form-control-sm text-end peca-preco" style="width: 65px; font-size: 0.78rem; padding: 2px 4px;" value="{{ '%.2f'|format(p.valor_unitario) }}" oninput="recalcularPecasCard('{{ item.id_aprovacao }}')">
+                                                        <span class="peca-subtotal text-end fw-bold text-dark" style="width: 65px; font-size: 0.78rem;">{{ p.subtotal_formatado }}</span>
+                                                        <button type="button" class="btn btn-link text-danger p-0" style="width: 20px; text-decoration: none;" onclick="removerLinhaPeca('{{ item.id_aprovacao }}', this)">✕</button>
                                                     </div>
                                                 {% endfor %}
                                             {% endif %}
                                         </div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm w-100 py-0 mt-1" style="font-size: 0.72rem;" onclick="adicionarLinhaPeca('{{ item.id_aprovacao }}')">
+                                            + Adicionar Peça
+                                        </button>
                                     </div>
 
                                     <div class="input-group input-group-sm mb-1">

@@ -691,7 +691,9 @@ def lancar_ordem_servico_pecas(contract_item_request_id, km_atual, itens_pecas, 
         except Exception:
             unit = 0.0
 
-        desc = str(item.get("descricao", "")).strip().upper()
+        desc = str(item.get("descricao_pura") or item.get("descricao", "")).strip().upper()
+        desc = re.sub(r"\s*:\s*R\$\s*[\d\.,]+.*$", "", desc, flags=re.IGNORECASE).strip()
+        desc = re.sub(r"\s*\$\s*[\d\.,]+.*$", "", desc).strip()
 
         order_items_payload.append({
             "expenseGroupId": 7,                              # 01.01.02 - Peças
