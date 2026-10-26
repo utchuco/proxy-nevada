@@ -278,6 +278,7 @@ def painel_aprovar(id_aprovacao):
     km_atual = int(edicoes.get("km_atual") or checklist_alvo.get("km_atual") or 0)
     descricao = edicoes.get("descricao") or checklist_alvo.get("descricao") or "Manutenção"
     solicitante = edicoes.get("solicitante") or checklist_alvo.get("solicitante") or "Equipe Nevada"
+    cliente_nome = edicoes.get("cliente_nome") or checklist_alvo.get("cliente_nome", "")
     telefone = edicoes.get("telefone") or checklist_alvo.get("telefone") or "11999999999"
     email = edicoes.get("email") or checklist_alvo.get("email") or "frota@locadoranevada.com.br"
     tipo_veiculo = checklist_alvo.get("tipo_veiculo", "alugado")
