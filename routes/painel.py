@@ -316,21 +316,26 @@ def painel_aprovar(id_aprovacao):
     if not data_iso or len(str(data_iso).strip()) < 10:
         data_iso = datetime.now().strftime("%Y-%m-%dT10:00:00")
 
-    # 2. Mapeamento de motivos e classes da Blue Fleet
+    # 2. Mapeamento de motivos e classes da Blue Fleet (garante IDs numéricos oficiais)
     motivo_raw = str(edicoes.get("motivo_id") or checklist_alvo.get("motivo_id", "CorrectiveMaintenance"))
     classe_raw = str(edicoes.get("motivo_classe") or checklist_alvo.get("motivo_classe", "CorrectiveMaintenanceMechanicalFailure"))
 
-    if motivo_raw == "2":
-        motivo_id = "CorrectiveMaintenance"
-        classe_id = "CorrectiveMaintenanceMechanicalFailure" if classe_raw in ["9", "2", ""] else classe_raw
-    elif motivo_raw == "1":
-        motivo_id = "PreventiveMaintenance"
-        classe_id = "PreventiveMaintenanceQuilometerRevision" if classe_raw in ["1", ""] else classe_raw
+    if motivo_raw in ["2", "CorrectiveMaintenance"]:
+        motivo_id = 2
+        classe_id = 9
+        is_revisao = False
+    elif motivo_raw in ["1", "PreventiveMaintenance"]:
+        motivo_id = 1
+        classe_id = 1
+        is_revisao = True
+    elif motivo_raw in ["Claim", "3"]:
+        motivo_id = 3
+        classe_id = 11
+        is_revisao = False
     else:
-        motivo_id = motivo_raw
-        classe_id = classe_raw
-
-    is_revisao = True if motivo_id == "PreventiveMaintenance" else False
+        motivo_id = int(motivo_raw) if str(motivo_raw).isdigit() else 2
+        classe_id = int(classe_raw) if str(classe_raw).isdigit() else 9
+        is_revisao = False
 
     try:
         # 3. Resolução do contractItemId ativo
@@ -342,13 +347,18 @@ def painel_aprovar(id_aprovacao):
             return jsonify({"isSuccess": False, "erro": f"Carro {placa_api} não possui contractItemId ativo na API."}), 400
 
         # 4. Bloco de Manutenção oficial
-        # Data segura para a Blue Fleet aceitar (hoje/agora)
-        # A Blue Fleet não aceita agendamento nem check-in no passado.
-        data_valida_bluefleet = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        # A Blue Fleet exige que o agendamento (scheduling1) seja uma data futura no fuso UTC.
+        # Definir para amanhã às 10:00 garante 100% de aceitação sem erro de data retroativa.
+        data_agendamento_segura = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
 
-        # 4. Bloco de Manutenção oficial
+        # Trata quilometragem numérica limpa
+        try:
+            km_num = int(re.sub(r"[^\d]", "", str(km_atual or 0)))
+        except Exception:
+            km_num = 0
+
         bloco_manutencao = {
-            "currentOdometer": km_atual,
+            "currentOdometer": km_num,
             "description": descricao,
             "providerId": 197,
             "city": "São Paulo",
@@ -359,8 +369,8 @@ def painel_aprovar(id_aprovacao):
             "requesterName": solicitante,
             "requesterPhone": telefone,
             "requesterEmail": email,
-            "pickupDate": data_valida_bluefleet,
-            "scheduling1": data_valida_bluefleet
+            "pickupDate": data_agendamento_segura,
+            "scheduling1": data_agendamento_segura
         }
 
         # Anexa PDF do checklist com o nome EXATAMENTE igual ao que o usuário enviou
@@ -424,7 +434,7 @@ def painel_aprovar(id_aprovacao):
             payload_bluefleet["maintenancePlanRevisionId"] = "149"
 
         # 5. Envio e avanço automático da fila na Blue Fleet com data garantida válida
-        sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_valida_bluefleet)
+        sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_agendamento_segura)
 
         if sucesso:
             # 6. Se houver requisição de peças, lança a Ordem de Serviço de Peças na Blue Fleet

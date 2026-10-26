@@ -5,6 +5,7 @@ import time
 import base64
 import threading
 import requests
+from datetime import datetime, timezone, timedelta
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
@@ -645,12 +646,15 @@ def criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_is
         
         # Avanço Automático do Workflow até Aguardando Orçamento (3 passos)
         try:
+            dt_schedule = data_iso or (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT10:00:00")
+            dt_checkin = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
             r_pre = requests.post(f"{API_URL}/contract-item-request/{req_id}/pre-scheduling", 
-                                  headers=headers, json={"providerId": 197, "scheduledFor": data_iso}, timeout=5)
+                                  headers=headers, json={"providerId": 197, "scheduledFor": dt_schedule}, timeout=5)
             r_cnf = requests.post(f"{API_URL}/contract-item-request/{req_id}/schedule-confirmation", 
                                   headers=headers, timeout=5)
             r_chk = requests.post(f"{API_URL}/contract-item-request/{req_id}/waiting-checkin", 
-                                  headers=headers, json={"confirmVehicleCheckinDate": data_iso}, timeout=5)
+                                  headers=headers, json={"confirmVehicleCheckinDate": dt_checkin}, timeout=5)
             print(f"Transição de fila para ocorrência {req_id}: pre={r_pre.status_code}, cnf={r_cnf.status_code}, chk={r_chk.status_code}")
             if r_chk.status_code not in [200, 201]:
                 print(f"Aviso retorno waiting-checkin: {r_chk.text}")
