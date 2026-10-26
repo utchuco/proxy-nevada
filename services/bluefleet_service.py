@@ -728,17 +728,40 @@ def lancar_ordem_servico_pecas(contract_item_request_id, km_atual, itens_pecas, 
         os_number = dados_resp.get("orderNumber")
         oc_number = dados_resp.get("purchaseOrderNumber")
 
-        # Se o número da O.C ainda não veio diretamente no retorno, busca os detalhes da ordem
+        # Se o número da O.C ainda não veio diretamente, aprova os itens da OS para gerar a Ordem de Compra oficial
         if not oc_number and ord_id:
             try:
-                time.sleep(1)
+                # 1. Busca os IDs dos itens da OS recém-criada
                 r_det = requests.get(f"{API_URL}/contract-item-request/{contract_item_request_id}/order/{ord_id}", headers=headers, timeout=10)
                 if r_det.status_code == 200:
                     det = r_det.json().get("data", {})
-                    oc_number = det.get("purchaseOrderNumber")
-                    os_number = os_number or det.get("orderNumber")
-            except Exception as e_det:
-                print(f"Aviso ao consultar detalhes da ordem de serviço: {e_det}")
+                    itens_os = det.get("orderItems", [])
+                    itens_aprovacao = [
+                        {
+                            "contractItemRequestOrderItemId": it.get("orderItemId"),
+                            "orderApprovalCustomerItemStatusId": "Approved"
+                        }
+                        for it in itens_os if it.get("orderItemId")
+                    ]
+
+                    # 2. Dispara a aprovação dos itens para a Blue Fleet gerar a O.C
+                    if itens_aprovacao:
+                        payload_aprovacao = {
+                            "comments": "Aprovado automaticamente - Peças Nevada",
+                            "items": itens_aprovacao
+                        }
+                        url_app = f"{API_URL}/contract-item-request/{contract_item_request_id}/order/{ord_id}/approval"
+                        requests.post(url_app, headers=headers, json=payload_aprovacao, timeout=10)
+
+                # 3. Consulta os detalhes atualizados da OS com a O.C gerada
+                time.sleep(1.5)
+                r_pos = requests.get(f"{API_URL}/contract-item-request/{contract_item_request_id}/order/{ord_id}", headers=headers, timeout=10)
+                if r_pos.status_code == 200:
+                    det_pos = r_pos.json().get("data", {})
+                    oc_number = det_pos.get("purchaseOrderNumber") or oc_number
+                    os_number = det_pos.get("orderNumber") or os_number
+            except Exception as e_app:
+                print(f"Aviso ao aprovar OS {ord_id} e obter Ordem de Compra: {e_app}")
 
         return True, oc_number, os_number, None
     else:
