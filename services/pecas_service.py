@@ -399,23 +399,15 @@ def desenhar_requisicao_layout(c, dados, x_offset=36, y_top=805):
 def gerar_pdf_requisicao_pecas(dados):
     """
     Gera o PDF digital limpo da Requisição de Peças (Opção B) no layout 100% fiel à Nevada / Excel.
-    Contém 1ª via (topo) e 2ª via (fundo) com linha de corte pontilhada.
+    Recortado para conter apenas 1 via única (meia folha / 595.27 x 421.0 pt), sem espaços sobrando.
     Retorna os bytes do PDF gerado.
     """
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
+    tamanho_meia_folha = (595.27, 421.0)
+    c = canvas.Canvas(buffer, pagesize=tamanho_meia_folha)
     
-    # Desenha a 1ª via (metade superior da folha)
-    desenhar_requisicao_layout(c, dados, x_offset=36, y_top=805)
-    
-    # Desenha a 2ª via (metade inferior da folha)
-    desenhar_requisicao_layout(c, dados, x_offset=36, y_top=395)
-    
-    # Linha pontilhada no meio para destacar o corte de via
-    c.setStrokeColor(colors.HexColor("#cbd5e1"))
-    c.setDash(4, 4)
-    c.line(36, 408, 559, 408)
-    c.setDash([])
+    # Desenha apenas 1 via recortada no tamanho exato
+    desenhar_requisicao_layout(c, dados, x_offset=36, y_top=405)
     
     c.showPage()
     c.save()
