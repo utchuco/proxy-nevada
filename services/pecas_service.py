@@ -179,172 +179,244 @@ def processar_calculos_pecas(dados_brutos):
     resultado["total_geral_formatado"] = f"R$ {total_fmt}"
     return resultado
 
+def desenhar_requisicao_layout(c, dados, x_offset=36, y_top=805):
+    """
+    Desenha uma cópia exata da Requisição de Peças (fiel ao modelo Excel / Nevada).
+    """
+    largura_tabela = 523
+    
+    # Cores fiéis ao Excel
+    cor_azul_nevada = colors.HexColor("#002060")
+    cor_cinza_escuro = colors.HexColor("#1f2937")  # Cabeçalhos Itens requisitados e Entrega
+    cor_cinza_claro = colors.HexColor("#e5e7eb")   # Fundo quadrado cinza e cabeçalho colunas
+    cor_texto_escuro = colors.HexColor("#111827")
+    cor_borda = colors.HexColor("#9ca3af")
+    cor_borda_tabela = colors.HexColor("#4b5563")
+
+    # 1. Cabeçalho
+    # "Nevada" (Calibri/Helvetica Bold 34pt Azul Marinho)
+    c.setFont("Helvetica-Bold", 34)
+    c.setFillColor(cor_azul_nevada)
+    c.drawString(x_offset, y_top - 32, "Nevada")
+
+    # "Requisição de Peças" (Helvetica 17pt)
+    c.setFont("Helvetica", 17)
+    c.setFillColor(cor_texto_escuro)
+    c.drawString(x_offset + 175, y_top - 18, "Requisição de Peças")
+
+    # O.C nº
+    c.setFont("Helvetica", 11)
+    c.setFillColor(cor_texto_escuro)
+    c.drawString(x_offset + 320, y_top - 32, "O.C nº")
+    # Linha para a O.C
+    c.setStrokeColor(colors.HexColor("#64748b"))
+    c.setLineWidth(1)
+    c.line(x_offset + 355, y_top - 33, x_offset + largura_tabela, y_top - 33)
+
+    # Número da O.C em destaque vermelho caso exista
+    oc_num = str(dados.get("oc_num") or "").strip()
+    if oc_num:
+        oc_destaque = oc_num.replace("OC-", "").replace("OC", "").strip()
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(colors.HexColor("#dc2626"))  # Vermelho conforme caneta/sistema
+        c.drawString(x_offset + 365, y_top - 30, oc_destaque)
+
+    # Data no cabeçalho
+    data_str = str(dados.get("data") or "").strip()
+    if not data_str:
+        data_str = "      /          /2026"
+    c.setFont("Helvetica", 10)
+    c.setFillColor(cor_texto_escuro)
+    c.drawString(x_offset + 360, y_top - 50, "Data")
+    c.drawString(x_offset + 395, y_top - 50, data_str)
+
+    # 2. Seção de Identificação: Unidade, Centro de Custo, Requisitante & Placa, Km, Veículo
+    y_id = y_top - 70
+    c.setFont("Helvetica", 10)
+    c.drawString(x_offset, y_id, "Unidade")
+    c.drawString(x_offset, y_id - 16, "Centro de custo")
+    c.drawString(x_offset, y_id - 32, "Requisitante")
+
+    # Quadrado cinza no canto superior esquerdo (Unidade até Requisitante)
+    c.setFillColor(cor_cinza_claro)
+    c.setStrokeColor(cor_borda)
+    c.setLineWidth(0.5)
+    c.rect(x_offset + 80, y_id - 36, 185, 48, fill=1, stroke=1)
+
+    # Linhas divisórias internas do bloco cinza
+    c.line(x_offset + 80, y_id - 4, x_offset + 265, y_id - 4)
+    c.line(x_offset + 80, y_id - 20, x_offset + 265, y_id - 20)
+
+    # Preenchimento dos dados dentro do bloco cinza
+    c.setFillColor(cor_texto_escuro)
+    c.setFont("Helvetica", 9)
+    if dados.get("unidade"):
+        c.drawString(x_offset + 85, y_id + 1, str(dados.get("unidade")))
+    if dados.get("centro_custo"):
+        c.drawString(x_offset + 85, y_id - 15, str(dados.get("centro_custo")))
+
+    # NOME DO CLIENTE NO QUADRADO CINZA (Campo Requisitante) - DESTAQUE OFICIAL
+    requisitante = str(dados.get("cliente_nome") or dados.get("requisitante") or "").strip().upper()
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_offset + 85, y_id - 31, requisitante)
+
+    # Lado direito: Placa, Km, Veículo
+    c.setFont("Helvetica", 10)
+    c.drawString(x_offset + 285, y_id - 16, "placa")
+    placa = str(dados.get("placa") or "").strip().upper()
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(x_offset + 325, y_id - 16, placa)
+
+    c.setFont("Helvetica", 10)
+    c.drawString(x_offset + 285, y_id - 32, "Km")
+    km = str(dados.get("km") or "").strip()
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_offset + 325, y_id - 32, km)
+
+    veiculo = str(dados.get("veiculo") or "").strip().upper()
+    if veiculo:
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(x_offset + 420, y_id - 32, veiculo)
+
+    # 3. Tabela de Peças
+    y_tab_top = y_id - 48
+    largura_qtd = 50
+    largura_mec = 45
+    largura_desc = largura_tabela - largura_qtd - largura_mec
+
+    # Faixa "Itens requisitados" (Escura)
+    c.setFillColor(cor_cinza_escuro)
+    c.rect(x_offset, y_tab_top - 18, largura_tabela - largura_mec, 18, fill=1, stroke=0)
+
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_offset + 8, y_tab_top - 13, "Itens requisitados")
+
+    # Bloco vertical MEC: à direita da tabela
+    altura_tabela_corpo = 18 + 18 + (9 * 16) + 18  # título + colunas + 9 linhas + total
+    c.setFillColor(colors.white)
+    c.setStrokeColor(cor_borda_tabela)
+    c.setLineWidth(0.8)
+    c.rect(x_offset + largura_tabela - largura_mec, y_tab_top - altura_tabela_corpo, largura_mec, altura_tabela_corpo, fill=0, stroke=1)
+
+    c.setFillColor(cor_texto_escuro)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_offset + largura_tabela - largura_mec + 8, y_tab_top - 14, "MEC:")
+    mec_nome = str(dados.get("mecanico") or "").strip().upper()
+    if mec_nome:
+        c.setFont("Helvetica-Bold", 8)
+        palavras = mec_nome.split()
+        for idx_m, p in enumerate(palavras[:2]):
+            c.drawString(x_offset + largura_tabela - largura_mec + 4, y_tab_top - 30 - (idx_m * 12), p)
+
+    # Cabeçalho das Colunas: Qtdade | Descrição
+    y_col = y_tab_top - 36
+    c.setFillColor(cor_cinza_claro)
+    c.setStrokeColor(cor_borda_tabela)
+    c.setLineWidth(0.8)
+    c.rect(x_offset, y_col, largura_qtd, 18, fill=1, stroke=1)
+    c.rect(x_offset + largura_qtd, y_col, largura_desc, 18, fill=1, stroke=1)
+
+    c.setFillColor(cor_texto_escuro)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(x_offset + (largura_qtd / 2), y_col + 5, "Qtdade")
+    c.drawString(x_offset + largura_qtd + 10, y_col + 5, "Descrição")
+
+    # Linhas de Itens (9 linhas de dados)
+    itens = dados.get("itens") or []
+    y_row = y_col
+    altura_linha = 16
+    for i in range(9):
+        y_row -= altura_linha
+        c.setFillColor(colors.white)
+        c.setStrokeColor(cor_borda_tabela)
+        c.setLineWidth(0.5)
+        c.rect(x_offset, y_row, largura_qtd, altura_linha, fill=1, stroke=1)
+        c.rect(x_offset + largura_qtd, y_row, largura_desc, altura_linha, fill=1, stroke=1)
+
+        if i < len(itens):
+            item = itens[i]
+            c.setFillColor(cor_texto_escuro)
+            c.setFont("Helvetica", 9)
+            
+            # Quantidade
+            qtd_txt = str(item.get("quantidade_formatada") or item.get("quantidade") or "")
+            c.drawCentredString(x_offset + (largura_qtd / 2), y_row + 4, qtd_txt)
+
+            # Descrição completa com R$
+            desc_txt = str(item.get("descricao") or "").strip()
+            c.drawString(x_offset + largura_qtd + 8, y_row + 4, desc_txt)
+
+    # Linha do TOTAL
+    y_total = y_row - 18
+    c.setFillColor(colors.white)
+    c.rect(x_offset, y_total, largura_qtd, 18, fill=1, stroke=1)
+    
+    largura_total_label = largura_desc - 90
+    c.rect(x_offset + largura_qtd, y_total, largura_total_label, 18, fill=1, stroke=1)
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(cor_texto_escuro)
+    c.drawRightString(x_offset + largura_qtd + largura_total_label - 10, y_total + 5, "TOTAL")
+
+    # Célula com valor do Total Geral
+    largura_total_val = 90
+    c.setFillColor(colors.white)
+    c.rect(x_offset + largura_qtd + largura_total_label, y_total, largura_total_val, 18, fill=1, stroke=1)
+    c.setFillColor(cor_texto_escuro)
+    c.setFont("Helvetica-Bold", 10)
+    total_val_str = str(dados.get("total_geral_formatado") or "").strip()
+    if total_val_str:
+        c.drawRightString(x_offset + largura_tabela - largura_mec - 8, y_total + 5, total_val_str)
+
+    # 4. Rodapé
+    y_rodape = y_total - 10
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#4b5563"))
+    c.drawString(x_offset, y_rodape - 8, "1 via enviar ao setor de estoque para reposição")
+    c.drawString(x_offset, y_rodape - 20, "2 via guardar como comprovante")
+
+    # Lado direito: Bloco "Entrega no estoque"
+    largura_entrega = 185
+    x_entrega = x_offset + largura_tabela - largura_entrega
+
+    # Faixa superior escura "Entrega no estoque"
+    c.setFillColor(cor_cinza_escuro)
+    c.rect(x_entrega, y_rodape - 14, largura_entrega, 14, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(x_entrega + 8, y_rodape - 10, "Entrega no estoque")
+
+    # Caixa de assinatura e data
+    c.setFillColor(colors.white)
+    c.setStrokeColor(cor_borda_tabela)
+    c.rect(x_entrega, y_rodape - 42, largura_entrega, 28, fill=0, stroke=1)
+
+    c.setFillColor(cor_texto_escuro)
+    c.setFont("Helvetica", 9)
+    c.drawString(x_entrega + 75, y_rodape - 38, "Data")
+    c.drawString(x_entrega + 100, y_rodape - 38, data_str)
+
 def gerar_pdf_requisicao_pecas(dados):
     """
-    Gera o PDF digital limpo da Requisição de Peças (Opção B) no layout fiel da Nevada.
+    Gera o PDF digital limpo da Requisição de Peças (Opção B) no layout 100% fiel à Nevada / Excel.
+    Contém 1ª via (topo) e 2ª via (fundo) com linha de corte pontilhada.
     Retorna os bytes do PDF gerado.
     """
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    largura, altura = A4
-
-    margem_esq = 36
-    margem_dir = largura - 36
-    largura_util = margem_dir - margem_esq
-
-    # 1. Cabeçalho
-    c.setFont("Helvetica-Bold", 24)
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.drawString(margem_esq, altura - 50, "Nevada")
-
-    c.setFont("Helvetica-Bold", 16)
-    c.drawCentredString(largura / 2, altura - 50, "Requisição de Peças")
-
-    # O.C nº
-    c.setFont("Helvetica", 11)
-    c.setFillColor(colors.HexColor("#1e293b"))
-    c.drawString(margem_dir - 190, altura - 50, "O.C nº")
-
-    c.setStrokeColor(colors.HexColor("#94a3b8"))
-    c.setLineWidth(1)
-    c.line(margem_dir - 150, altura - 52, margem_dir, altura - 52)
-
-    oc_num = str(dados.get("oc_num") or "").strip()
-    if oc_num:
-        # Se veio com prefixo 'OC-', pode exibir completo ou apenas o número
-        oc_destaque = oc_num if "OC" in oc_num.upper() else f"OC-{oc_num}"
-        c.setFont("Helvetica-Bold", 14)
-        c.setFillColor(colors.HexColor("#dc2626"))  # Destaque vermelho conforme original
-        c.drawString(margem_dir - 145, altura - 48, oc_destaque)
-
-    # Data
-    c.setFont("Helvetica", 10)
-    c.setFillColor(colors.HexColor("#334155"))
-    data_str = str(dados.get("data") or "").strip()
-    c.drawString(margem_dir - 150, altura - 70, f"Data: {data_str or '____/____/2026'}")
-
-    # 2. Dados de identificação (bloco esquerdo e direito)
-    y_info = altura - 95
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(margem_esq, y_info, "Unidade:")
-    c.setFont("Helvetica", 9)
-    c.drawString(margem_esq + 50, y_info, str(dados.get("unidade") or ""))
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(largura / 2 + 30, y_info, "Placa:")
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(largura / 2 + 70, y_info, str(dados.get("placa") or "").upper())
-
-    y_info -= 18
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(margem_esq, y_info, "Centro de custo:")
-    c.setFont("Helvetica", 9)
-    c.drawString(margem_esq + 85, y_info, str(dados.get("centro_custo") or ""))
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(largura / 2 + 30, y_info, "Km:")
-    c.setFont("Helvetica", 9)
-    c.drawString(largura / 2 + 70, y_info, str(dados.get("km") or ""))
-
-    # Veículo
-    veic = str(dados.get("veiculo") or "").upper()
-    if veic:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margem_dir - 90, y_info, veic)
-
-    y_info -= 18
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(margem_esq, y_info, "Requisitante:")
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(margem_esq + 70, y_info, str(dados.get("requisitante") or "").upper())
-
-    # 3. Faixa preta "Itens requisitados"
-    y_tabela = y_info - 25
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.rect(margem_esq, y_tabela, largura_util, 20, fill=1, stroke=0)
-
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(margem_esq + 8, y_tabela + 6, "Itens requisitados")
-
-    c.drawString(margem_dir - 120, y_tabela + 6, f"MEC: {str(dados.get('mecanico') or '').upper()}")
-
-    # 4. Cabeçalho das Colunas
-    y_col = y_tabela - 18
-    c.setFillColor(colors.HexColor("#f8fafc"))
-    c.rect(margem_esq, y_col, largura_util, 18, fill=1, stroke=1)
-
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.setFont("Helvetica-Bold", 9)
-    largura_qtd = 55
-    c.drawCentredString(margem_esq + (largura_qtd / 2), y_col + 5, "Qtdade")
-    c.drawString(margem_esq + largura_qtd + 8, y_col + 5, "Descrição")
-
-    # Linha vertical separadora de colunas
+    
+    # Desenha a 1ª via (metade superior da folha)
+    desenhar_requisicao_layout(c, dados, x_offset=36, y_top=805)
+    
+    # Desenha a 2ª via (metade inferior da folha)
+    desenhar_requisicao_layout(c, dados, x_offset=36, y_top=395)
+    
+    # Linha pontilhada no meio para destacar o corte de via
     c.setStrokeColor(colors.HexColor("#cbd5e1"))
-    c.line(margem_esq + largura_qtd, y_col, margem_esq + largura_qtd, y_col + 18)
-
-    # 5. Linhas da Tabela (11 linhas padrão do formulário)
-    itens = dados.get("itens") or []
-    total_linhas = max(11, len(itens))
-    altura_linha = 22
-    y_atual = y_col
-
-    c.setFont("Helvetica", 9)
-    for i in range(total_linhas):
-        y_atual -= altura_linha
-        # Retângulo da linha
-        c.setFillColor(colors.white if i % 2 == 0 else colors.HexColor("#fdfdfd"))
-        c.rect(margem_esq, y_atual, largura_util, altura_linha, fill=1, stroke=1)
-
-        # Divisor vertical entre Qtdade e Descrição
-        c.line(margem_esq + largura_qtd, y_atual, margem_esq + largura_qtd, y_atual + altura_linha)
-
-        if i < len(itens):
-            item = itens[i]
-            c.setFillColor(colors.HexColor("#0f172a"))
-            c.setFont("Helvetica-Bold", 9)
-            c.drawCentredString(margem_esq + (largura_qtd / 2), y_atual + 6, str(item.get("quantidade_formatada", "")))
-
-            c.setFont("Helvetica", 9)
-            desc_linha = str(item.get("descricao", ""))
-            c.drawString(margem_esq + largura_qtd + 8, y_atual + 6, desc_linha)
-
-    # 6. Linha do TOTAL
-    y_total = y_atual - 22
-    c.setFillColor(colors.HexColor("#f1f5f9"))
-    c.rect(margem_esq, y_total, largura_util, 22, fill=1, stroke=1)
-    c.line(margem_esq + largura_qtd, y_total, margem_esq + largura_qtd, y_total + 22)
-
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(margem_esq + (largura_qtd / 2), y_total + 6, "TOTAL")
-
-    total_fmt = dados.get("total_geral_formatado") or "R$ 0,00"
-    c.setFont("Helvetica-Bold", 11)
-    c.drawRightString(margem_dir - 12, y_total + 6, total_fmt)
-
-    # 7. Rodapé com as vias e carimbo de estoque
-    y_rodape = y_total - 25
-    c.setFont("Helvetica", 7.5)
-    c.setFillColor(colors.HexColor("#475569"))
-    c.drawString(margem_esq, y_rodape, "1 via enviar ao setor de estoque para reposição")
-    c.drawString(margem_esq, y_rodape - 12, "2 via guardar como comprovante")
-
-    # Box Entrega no estoque
-    c.setStrokeColor(colors.HexColor("#0f172a"))
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.rect(margem_dir - 200, y_rodape - 35, 200, 45, fill=0, stroke=1)
-
-    c.rect(margem_dir - 200, y_rodape - 5, 200, 15, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawCentredString(margem_dir - 100, y_rodape - 1, "Entrega no estoque")
-
-    c.setFillColor(colors.HexColor("#0f172a"))
-    c.setFont("Helvetica", 8)
-    c.drawString(margem_dir - 180, y_rodape - 25, f"Data: {data_str or '____/____/2026'}")
-
+    c.setDash(4, 4)
+    c.line(36, 408, 559, 408)
+    c.setDash([])
+    
     c.showPage()
     c.save()
 

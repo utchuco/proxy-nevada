@@ -447,8 +447,11 @@ def painel_aprovar(id_aprovacao):
                         dados_pecas["placa"] = placa_limpa
                     if not dados_pecas.get("km"):
                         dados_pecas["km"] = km_atual
-                    if not dados_pecas.get("requisitante"):
-                        dados_pecas["requisitante"] = cliente_nome or solicitante
+                    if not dados_pecas.get("veiculo"):
+                        dados_pecas["veiculo"] = checklist_alvo.get("modelo_veiculo", "")
+                    nome_cli_oficial = cliente_nome or checklist_alvo.get("cliente_nome") or solicitante
+                    dados_pecas["cliente_nome"] = nome_cli_oficial
+                    dados_pecas["requisitante"] = nome_cli_oficial
 
                     try:
                         pdf_pecas_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
@@ -509,8 +512,12 @@ def painel_upload_pecas(id_aprovacao):
         if chk:
             if not dados_processados.get("placa") or len(str(dados_processados.get("placa"))) < 7:
                 dados_processados["placa"] = chk.get("placa", "")
-            if not dados_processados.get("requisitante"):
-                dados_processados["requisitante"] = chk.get("cliente_nome") or chk.get("solicitante", "")
+            
+            # Prioriza sempre o cliente oficial do contrato do veículo no Blue Fleet
+            nome_cliente_oficial = chk.get("cliente_nome") or chk.get("solicitante", "")
+            dados_processados["cliente_nome"] = nome_cliente_oficial
+            dados_processados["requisitante"] = nome_cliente_oficial or dados_processados.get("requisitante", "")
+
             if not dados_processados.get("km"):
                 dados_processados["km"] = chk.get("km_atual", "")
             if not dados_processados.get("veiculo"):
@@ -556,10 +563,21 @@ def painel_gerar_pdf_pecas(id_aprovacao):
     if dados_req.get("requisitante"):
         dados_pecas["requisitante"] = str(dados_req.get("requisitante")).strip()
 
+    nome_cli = chk.get("cliente_nome") or chk.get("solicitante", "")
+    dados_pecas["cliente_nome"] = nome_cli
+    if not dados_pecas.get("requisitante"):
+        dados_pecas["requisitante"] = nome_cli
+    if not dados_pecas.get("placa"):
+        dados_pecas["placa"] = chk.get("placa", "")
+    if not dados_pecas.get("km"):
+        dados_pecas["km"] = chk.get("km_atual", "")
+    if not dados_pecas.get("veiculo"):
+        dados_pecas["veiculo"] = chk.get("modelo_veiculo", "")
+
     try:
         # Gera o PDF limpo
         pdf_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
-        oc_salvar = dados_pecas.get("oc_num") or f"121471_{chk.get('placa', '')}"
+        oc_salvar = dados_pecas.get("oc_num") or f"Requisicao_{chk.get('placa', id_aprovacao[:8])}"
         caminho_salvo, nome_arquivo = salvar_pdf_pecas_gerado(id_aprovacao, oc_salvar, pdf_bytes)
 
         dados_pecas["caminho_pdf_gerado"] = caminho_salvo
