@@ -121,7 +121,13 @@ function validarPlacaEmTempoReal(id) {
     debounceTimerPlaca[id] = setTimeout(async () => {
         try {
             const res = await fetch(`/api/veiculo/${placa}/verificar`);
-            const data = await res.json();
+            let data;
+            const resText = await res.text();
+            try {
+                data = JSON.parse(resText);
+            } catch(jsonErr) {
+                throw new Error(res.status === 500 || res.status === 504 ? "O servidor demorou para responder. Tente novamente." : "Falha na resposta do servidor (" + res.status + ")");
+            }
             if (data.isSuccess && data.existe) {
                 input.style.borderColor = '#198754';
                 input.style.backgroundColor = '#f0fff4';
@@ -285,7 +291,13 @@ function validarPlacaModal() {
     debounceTimerModal = setTimeout(async () => {
         try {
             const res = await fetch(`/api/veiculo/${placa}/verificar`);
-            const data = await res.json();
+            let data;
+            const resText = await res.text();
+            try {
+                data = JSON.parse(resText);
+            } catch(jsonErr) {
+                throw new Error(res.status === 500 || res.status === 504 ? "O servidor demorou para responder. Tente novamente." : "Falha na resposta do servidor (" + res.status + ")");
+            }
             if (data.isSuccess && data.existe) {
                 input.style.borderColor = '#198754';
                 status.style.color = '#198754';
@@ -610,7 +622,13 @@ async function subirPapelPecas(id) {
                 body: JSON.stringify({ pdf_base64: base64Data })
             });
 
-            const data = await res.json();
+            let data;
+            const resText = await res.text();
+            try {
+                data = JSON.parse(resText);
+            } catch(jsonErr) {
+                throw new Error(res.status === 500 || res.status === 504 ? "O servidor demorou para responder. Tente novamente." : "Falha na resposta do servidor (" + res.status + ")");
+            }
             if (data.isSuccess && data.dados_pecas) {
                 const pecas = data.dados_pecas;
                 if (statusEl) statusEl.className = 'd-none';

@@ -21,9 +21,22 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
+def detectar_mime_type(dados_bytes):
+    """Detecta automaticamente se o arquivo é PDF, JPEG, PNG ou WEBP."""
+    if dados_bytes.startswith(b"%PDF"):
+        return "application/pdf"
+    elif dados_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    elif dados_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    elif dados_bytes.startswith(b"RIFF") and len(dados_bytes) >= 12 and dados_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
 def extrair_dados_requisicao_pecas(pdf_bytes):
     """
     Utiliza o Gemini para decifrar a folha de Requisição de Peças manuscrita.
+    Aceita PDF ou fotos (JPEG/PNG/WEBP).
     Retorna os dados cadastrais e a lista de itens com quantidades e valores.
     """
     chave_gemini = os.getenv("GEMINI_API_KEY")
@@ -31,6 +44,7 @@ def extrair_dados_requisicao_pecas(pdf_bytes):
         logging.warning("GEMINI_API_KEY não configurada no .env")
         return None
 
+    mime_tipo = detectar_mime_type(pdf_bytes)
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     prompt = """
@@ -58,10 +72,10 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
 """
 
     modelos = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.6-flash"
+        "gemini-3-flash-preview",
+        "gemini-3.6-flash",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3.5-flash-lite"
     ]
 
     for modelo in modelos:
@@ -73,7 +87,7 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
                         {"text": prompt},
                         {
                             "inline_data": {
-                                "mime_type": "application/pdf",
+                                "mime_type": mime_tipo,
                                 "data": pdf_b64
                             }
                         }
@@ -83,7 +97,7 @@ Analise a imagem deste formulário e responda SEMPRE em formato JSON puro, sem b
         }
 
         try:
-            res = requests.post(url, json=payload, timeout=20)
+            res = requests.post(url, json=payload, timeout=15)
             if res.status_code == 200:
                 texto = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 if texto.startswith("```"):
