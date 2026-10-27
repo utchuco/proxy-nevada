@@ -212,6 +212,7 @@ async function aprovarChecklist(id) {
         telefone: document.getElementById('tel_' + id).value.trim(),
         leva_e_traz: document.getElementById('leva_traz_' + id).value,
         sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es',
+        oc_num: document.getElementById('oc_input_' + id)?.value.trim() || '',
         itens_pecas: itensPecas
     };
 

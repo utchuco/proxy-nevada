@@ -451,9 +451,11 @@ def painel_aprovar(id_aprovacao):
 
             if itens_pecas:
                 ok_ord, oc_num, os_num, err_ord = lancar_ordem_servico_pecas(req_id, km_atual, itens_pecas)
-                if ok_ord and oc_num:
-                    oc_gerada = oc_num
-                    dados_pecas["oc_num"] = oc_num
+                oc_manual = str(edicoes.get("oc_num") or "").strip()
+                oc_final = oc_manual or oc_num
+                if ok_ord and oc_final:
+                    oc_gerada = oc_final
+                    dados_pecas["oc_num"] = oc_final
                     if not dados_pecas.get("placa"):
                         dados_pecas["placa"] = placa_limpa
                     if not dados_pecas.get("km"):
@@ -466,12 +468,12 @@ def painel_aprovar(id_aprovacao):
 
                     try:
                         pdf_pecas_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
-                        nome_pdf_oc = f"{oc_num}.pdf"
-                        salvar_pdf_pecas_gerado(id_aprovacao, oc_num, pdf_pecas_bytes)
+                        nome_pdf_oc = f"{oc_final}.pdf"
+                        salvar_pdf_pecas_gerado(id_aprovacao, oc_final, pdf_pecas_bytes)
                         # Anexa o PDF preenchido com a OC oficial na ocorrência da Blue Fleet
                         anexar_arquivo_ocorrencia(req_id, nome_pdf_oc, pdf_pecas_bytes)
                     except Exception as e_pdf_oc:
-                        print(f"Aviso ao gerar e anexar PDF de peças com OC {oc_num}: {e_pdf_oc}")
+                        print(f"Aviso ao gerar e anexar PDF de peças com OC {oc_final}: {e_pdf_oc}")
                 elif err_ord:
                     print(f"Aviso ao lançar ordem de serviço de peças na Blue Fleet: {err_ord}")
 
