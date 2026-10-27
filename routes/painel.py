@@ -398,20 +398,6 @@ def painel_aprovar(id_aprovacao):
         else:
             print(f"Aviso: Checklist {id_aprovacao} aprovado sem arquivo PDF vinculado.")
 
-        # Se houver Requisição de Peças gerada, inclui automaticamente nos arquivos da ocorrência
-        caminho_pdf_pecas, nome_pecas = obter_pdf_pecas_gerado_path(id_aprovacao)
-        if caminho_pdf_pecas and os.path.exists(caminho_pdf_pecas):
-            try:
-                with open(caminho_pdf_pecas, "rb") as f_pecas:
-                    b64_pecas = base64.b64encode(f_pecas.read()).decode()
-                files_payload.append({
-                    "fileName": nome_pecas or "Requisicao_Pecas.pdf",
-                    "base64Contents": b64_pecas,
-                    "fileType": "UnidentifiedDocument"
-                })
-            except Exception as e_pec:
-                print(f"Aviso: falha ao codificar PDF de peças: {e_pec}")
-
         payload_bluefleet = {
             "contractItemRequestReasonId": motivo_id,
             "contractItemRequestReasonClassId": classe_id,
@@ -438,55 +424,11 @@ def painel_aprovar(id_aprovacao):
         sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_agendamento_segura)
 
         if sucesso:
-            # 6. Se houver requisição de peças, lança a Ordem de Serviço de Peças na Blue Fleet
-            dados_pecas = checklist_alvo.get("dados_pecas") or {}
-            # Se o usuário editou a lista de peças no card, usa a lista atualizada
-            if edicoes.get("itens_pecas"):
-                dados_pecas["itens"] = edicoes.get("itens_pecas")
-                dados_pecas = processar_calculos_pecas(dados_pecas)
-                atualizar_checklist_pendente(id_aprovacao, {"dados_pecas": dados_pecas})
-
-            itens_pecas = dados_pecas.get("itens") or []
-            oc_gerada = None
-
-            if itens_pecas:
-                ok_ord, oc_num, os_num, err_ord = lancar_ordem_servico_pecas(req_id, km_atual, itens_pecas)
-                oc_manual = str(edicoes.get("oc_num") or "").strip()
-                oc_final = oc_manual or oc_num
-                if ok_ord and oc_final:
-                    oc_gerada = oc_final
-                    dados_pecas["oc_num"] = oc_final
-                    if not dados_pecas.get("placa"):
-                        dados_pecas["placa"] = placa_limpa
-                    if not dados_pecas.get("km"):
-                        dados_pecas["km"] = km_atual
-                    if not dados_pecas.get("veiculo"):
-                        dados_pecas["veiculo"] = checklist_alvo.get("modelo_veiculo", "")
-                    nome_cli_oficial = cliente_nome or checklist_alvo.get("cliente_nome") or solicitante
-                    dados_pecas["cliente_nome"] = nome_cli_oficial
-                    dados_pecas["requisitante"] = nome_cli_oficial
-
-                    try:
-                        pdf_pecas_bytes = gerar_pdf_requisicao_pecas(dados_pecas)
-                        nome_pdf_oc = f"{oc_final}.pdf"
-                        salvar_pdf_pecas_gerado(id_aprovacao, oc_final, pdf_pecas_bytes)
-                        # Anexa o PDF preenchido com a OC oficial na ocorrência da Blue Fleet
-                        anexar_arquivo_ocorrencia(req_id, nome_pdf_oc, pdf_pecas_bytes)
-                    except Exception as e_pdf_oc:
-                        print(f"Aviso ao gerar e anexar PDF de peças com OC {oc_final}: {e_pdf_oc}")
-                elif err_ord:
-                    print(f"Aviso ao lançar ordem de serviço de peças na Blue Fleet: {err_ord}")
-
             remover_checklist_pendente(id_aprovacao)
-            msg_sucesso = f"Ocorrência criada com sucesso para a placa {placa_api}!"
-            if oc_gerada:
-                msg_sucesso += f" Ordem de Compra gerada e vinculada: {oc_gerada}"
-
             return jsonify({
                 "isSuccess": True,
-                "mensagem": msg_sucesso,
-                "contractItemRequestId": req_id,
-                "purchaseOrderNumber": oc_gerada
+                "mensagem": f"Ocorrência criada com sucesso para a placa {placa_api}!",
+                "contractItemRequestId": req_id
             }), 200
         else:
             return jsonify({"isSuccess": False, "erro": f"Blue Fleet recusou: {erro_bf}"}), 400

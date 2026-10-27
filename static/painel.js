@@ -199,8 +199,6 @@ async function aprovarChecklist(id) {
 
     if (!confirm("Confirmar envio para a Blue Fleet?")) return;
 
-    const itensPecas = coletarItensPecasDoCard(id);
-
     const payload = {
         placa: document.getElementById('placa_' + id).value.trim(),
         km_atual: document.getElementById('km_' + id).value,
@@ -211,9 +209,7 @@ async function aprovarChecklist(id) {
         solicitante: document.getElementById('solic_' + id).value.trim(),
         telefone: document.getElementById('tel_' + id).value.trim(),
         leva_e_traz: document.getElementById('leva_traz_' + id).value,
-        sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es',
-        oc_num: document.getElementById('oc_input_' + id)?.value.trim() || '',
-        itens_pecas: itensPecas
+        sufixo_tipo: document.getElementById('tipo_pdf_' + id)?.value || 'es'
     };
 
     const btnAprovar = document.querySelector('#card_' + id + ' .btn-approve');
