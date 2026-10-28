@@ -374,9 +374,14 @@ def painel_aprovar(id_aprovacao):
             "scheduling1": data_agendamento_segura
         }
 
-        # Anexa PDF do checklist com o nome EXATAMENTE igual ao que o usuário enviou
-        # preservando a data histórica original colocada pelo robô
-        files_payload = []
+        # Prepara PDF do checklist para anexar como Documento (Público) após a criação da ocorrência
+        # NOTA DE HISTÓRICO / ROLLBACK:
+        # Anteriormente, o checklist era enviado dentro do payload de criação da ocorrência com:
+        # files: [{ "fileName": nome_arquivo_final, "base64Contents": b64_pdf, "fileType": "UnidentifiedDocument" }]
+        # Isso fazia a Blue Fleet classificar o arquivo como "Documento não classificado".
+        # Agora, é anexado via POST /contract-item-request/{req_id}/file, que classifica diretamente como Documento (Público).
+        pdf_bytes_checklist = None
+        nome_arquivo_final = None
         caminho_pdf = checklist_alvo.get("caminho_pdf")
         if caminho_pdf and os.path.exists(caminho_pdf):
             try:
@@ -385,14 +390,9 @@ def painel_aprovar(id_aprovacao):
                     nome_arquivo_final += ".pdf"
 
                 with open(caminho_pdf, "rb") as f_pdf:
-                    b64_pdf = base64.b64encode(f_pdf.read()).decode()
-                files_payload.append({
-                    "fileName": nome_arquivo_final,
-                    "base64Contents": b64_pdf,
-                    "fileType": "UnidentifiedDocument"
-                })
+                    pdf_bytes_checklist = f_pdf.read()
             except Exception as e_pdf:
-                print(f"Aviso: não foi possível codificar PDF do checklist: {e_pdf}")
+                print(f"Aviso: não foi possível ler PDF do checklist: {e_pdf}")
         elif caminho_pdf:
             print(f"Aviso: Arquivo PDF indicado não encontrado no disco: {caminho_pdf}")
         else:
@@ -402,7 +402,7 @@ def painel_aprovar(id_aprovacao):
             "contractItemRequestReasonId": motivo_id,
             "contractItemRequestReasonClassId": classe_id,
             "maintenance": bloco_manutencao,
-            "files": files_payload
+            "files": []
         }
 
         if tipo_veiculo == "alugado":
@@ -424,6 +424,17 @@ def painel_aprovar(id_aprovacao):
         sucesso, req_id, erro_bf = criar_ocorrencia_e_avancar_fila(contract_item_id, payload_bluefleet, data_agendamento_segura)
 
         if sucesso:
+            # Anexa o checklist como Documento (Público) oficial da ocorrência
+            if pdf_bytes_checklist and nome_arquivo_final:
+                try:
+                    ok_anexo, err_anexo = anexar_arquivo_ocorrencia(req_id, nome_arquivo_final, pdf_bytes_checklist)
+                    if not ok_anexo:
+                        print(f"Aviso ao anexar checklist público na ocorrência {req_id}: {err_anexo}")
+                    else:
+                        print(f"Checklist {nome_arquivo_final} anexado com sucesso como Documento (Público) na ocorrência {req_id}.")
+                except Exception as e_anexo:
+                    print(f"Aviso: falha ao anexar PDF do checklist na ocorrência {req_id}: {e_anexo}")
+
             remover_checklist_pendente(id_aprovacao)
             return jsonify({
                 "isSuccess": True,
