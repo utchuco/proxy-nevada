@@ -803,19 +803,31 @@ def formatar_data_br(data_iso):
         pass
     return str(data_iso)[:10]
 
+_OFICINA_CACHE = {}
+_OFICINA_CACHE_LOCK = threading.Lock()
+
 def consultar_historico_pecas_veiculo(placa):
-    """Consulta todas as peças e serviços já realizados no veículo na Blue Fleet."""
-    placa = placa.strip().upper()
-    if len(placa) == 7 and "-" not in placa:
-        placa = f"{placa[:3]}-{placa[3:]}"
+    """Consulta todas as peças e serviços já realizados no veículo na Blue Fleet de forma robusta e com cache."""
+    placa_raw = (placa or "").strip().upper()
+    placa_limpa = placa_raw.replace("-", "").replace(" ", "")
+    placa_com_hifen = f"{placa_limpa[:3]}-{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa_limpa
+
+    # Verifica cache em memória (TTL: 90 segundos para respostas rápidas e sem flutuação)
+    now = time.time()
+    cache_key = placa_limpa
+    with _OFICINA_CACHE_LOCK:
+        if cache_key in _OFICINA_CACHE:
+            cached_data, cached_time = _OFICINA_CACHE[cache_key]
+            if now - cached_time < 90:
+                return cached_data["dados_veiculo"], cached_data["pecas"], cached_data["erro"]
 
     try:
         token = get_access_token()
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
         # 1. Busca dados básicos do veículo (modelo, km atual)
-        dados_veiculo = {"placa": placa, "modelo": "", "km_atual": ""}
-        url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
+        dados_veiculo = {"placa": placa_com_hifen, "modelo": "", "km_atual": ""}
+        url_busca = f"{API_URL}/vehicle?LicensePlate={placa_com_hifen}"
         resp_veh = get_blindado(url_busca, headers, rapido=True)
         if resp_veh.status_code == 200:
             veiculos = resp_veh.json().get("data", [])
@@ -824,31 +836,51 @@ def consultar_historico_pecas_veiculo(placa):
                 dados_veiculo["modelo"] = v.get("vehicleModelName") or v.get("modelName") or ""
                 km_val = v.get("currentOdometer") or v.get("odometer")
                 if km_val:
-                    dados_veiculo["km_atual"] = f"{int(km_val):,} km".replace(",", ".")
+                    try:
+                        dados_veiculo["km_atual"] = f"{int(km_val):,} km".replace(",", ".")
+                    except Exception:
+                        dados_veiculo["km_atual"] = f"{km_val} km"
 
-        # 2. Busca histórico de ocorrências do veículo
-        url_oc = f"{API_URL}/contract-item-request/search?LicensePlate={placa}"
+        # 2. Busca histórico de ocorrências do veículo (tenta com hífen e fallback sem hífen se vazio)
+        url_oc = f"{API_URL}/contract-item-request/search?LicensePlate={placa_com_hifen}"
         resp_oc = get_blindado(url_oc, headers)
-        if resp_oc.status_code != 200:
+        ocorrencias = []
+        if resp_oc.status_code == 200:
+            ocorrencias = resp_oc.json().get("data", [])
+        
+        if not ocorrencias and placa_limpa != placa_com_hifen:
+            resp_oc_limpa = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_limpa}", headers)
+            if resp_oc_limpa.status_code == 200:
+                ocorrencias = resp_oc_limpa.json().get("data", [])
+
+        if not ocorrencias and resp_oc.status_code != 200:
             return dados_veiculo, [], "Não foi possível consultar as ocorrências do veículo na Blue Fleet."
 
-        ocorrencias = resp_oc.json().get("data", [])
         if not ocorrencias:
-            return dados_veiculo, [], None
+            resultado = (dados_veiculo, [], None)
+            with _OFICINA_CACHE_LOCK:
+                _OFICINA_CACHE[cache_key] = ({"dados_veiculo": dados_veiculo, "pecas": [], "erro": None}, now)
+            return resultado
 
-        # Filtra apenas ocorrências de manutenção ou sinistro (onde existem O.S com peças/serviços)
-        # Reason IDs: 1 (Preventiva), 2 (Corretiva), 3 (Sinistro), 8 (Preparação)
-        manutencoes = [
+        # Exclui apenas ocorrências que notoriamente nunca possuem O.S de manutenção (4: Infração, 6: Devolução)
+        candidatas = [
             oc for oc in ocorrencias 
-            if oc.get("contractItemRequestReasonId") in [1, 2, 3, 8]
+            if oc.get("contractItemRequestReasonId") not in [4, 6]
         ]
 
-        if not manutencoes:
-            return dados_veiculo, [], None
+        if not candidatas:
+            resultado = (dados_veiculo, [], None)
+            with _OFICINA_CACHE_LOCK:
+                _OFICINA_CACHE[cache_key] = ({"dados_veiculo": dados_veiculo, "pecas": [], "erro": None}, now)
+            return resultado
 
         def extrair_pecas_ocorrencia(oc):
             req_id = oc.get("contractItemRequestId")
-            r_det = requests.get(f"{API_URL}/contract-item-request/{req_id}", headers=headers, timeout=6)
+            if not req_id:
+                return []
+            
+            # Utiliza get_blindado com retry automático para não perder requisições por rate limit (429)
+            r_det = get_blindado(f"{API_URL}/contract-item-request/{req_id}", headers)
             if r_det.status_code != 200:
                 return []
             det = r_det.json().get("data", {})
@@ -857,14 +889,16 @@ def consultar_historico_pecas_veiculo(placa):
 
             for ord_info in orders:
                 ord_id = ord_info.get("contractItemRequestOrderId")
-                r_ord = requests.get(f"{API_URL}/contract-item-request/{req_id}/order/{ord_id}", headers=headers, timeout=6)
+                if not ord_id:
+                    continue
+                r_ord = get_blindado(f"{API_URL}/contract-item-request/{req_id}/order/{ord_id}", headers)
                 if r_ord.status_code != 200:
                     continue
                 order_data = r_ord.json().get("data", {})
                 km_raw = order_data.get("odometer") or det.get("currentOdometer")
                 try:
-                    km_fmt = f"{int(km_raw):,} km".replace(",", ".") if km_raw else "-"
                     km_num = int(km_raw) if km_raw else 0
+                    km_fmt = f"{km_num:,} km".replace(",", ".") if km_raw else "-"
                 except Exception:
                     km_fmt = f"{km_raw} km" if km_raw else "-"
                     km_num = 0
@@ -903,17 +937,28 @@ def consultar_historico_pecas_veiculo(placa):
 
         todas_pecas = []
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            resultados = executor.map(extrair_pecas_ocorrencia, manutencoes)
+        # Limita para 3 workers para evitar rate limit simultâneo da API da Blue Fleet
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            resultados = executor.map(extrair_pecas_ocorrencia, candidatas)
             for res in resultados:
                 todas_pecas.extend(res)
 
         # Ordena as peças pela data e KM mais recentes primeiro
         todas_pecas.sort(key=lambda x: (x.get("_sort_dt", ""), x.get("_sort_km", 0)), reverse=True)
 
+        # Se o km_atual não veio da consulta veicular, utiliza o maior KM encontrado nas manutenções
+        if not dados_veiculo.get("km_atual"):
+            max_km = max((p.get("_sort_km", 0) for p in todas_pecas), default=0)
+            if max_km > 0:
+                dados_veiculo["km_atual"] = f"{max_km:,} km".replace(",", ".")
+
+        # Salva em cache
+        with _OFICINA_CACHE_LOCK:
+            _OFICINA_CACHE[cache_key] = ({"dados_veiculo": dados_veiculo, "pecas": todas_pecas, "erro": None}, now)
+
         return dados_veiculo, todas_pecas, None
 
     except Exception as e:
-        print(f"Erro ao consultar histórico de peças para {placa}: {e}")
-        return {"placa": placa, "modelo": "", "km_atual": ""}, [], f"Erro interno ao consultar: {str(e)}"
+        print(f"Erro ao consultar histórico de peças para {placa_raw}: {e}")
+        return {"placa": placa_com_hifen, "modelo": "", "km_atual": ""}, [], f"Erro interno ao consultar: {str(e)}"
 

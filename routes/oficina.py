@@ -36,3 +36,4 @@ def api_consultar_oficina(placa):
         "pecas": pecas,
         "total": len(pecas)
     }), 200
+
