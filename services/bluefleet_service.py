@@ -785,3 +785,135 @@ def anexar_arquivo_ocorrencia(contract_item_request_id, nome_arquivo, pdf_bytes)
     url_file = f"{API_URL}/contract-item-request/{contract_item_request_id}/file"
     resp = requests.post(url_file, headers=headers, json=payload, timeout=15)
     return resp.status_code in [200, 201], resp.text
+
+def formatar_data_br(data_iso):
+    """Converte ISO timestamp ou string de data para DD/MM/AAAA."""
+    if not data_iso:
+        return "-"
+    try:
+        clean = str(data_iso).replace("Z", "")
+        if "T" in clean:
+            dt = datetime.fromisoformat(clean)
+            return dt.strftime("%d/%m/%Y")
+        elif "-" in clean:
+            partes = clean.split("-")
+            if len(partes) >= 3:
+                return f"{partes[2][:2]}/{partes[1]}/{partes[0]}"
+    except Exception:
+        pass
+    return str(data_iso)[:10]
+
+def consultar_historico_pecas_veiculo(placa):
+    """Consulta todas as peças e serviços já realizados no veículo na Blue Fleet."""
+    placa = placa.strip().upper()
+    if len(placa) == 7 and "-" not in placa:
+        placa = f"{placa[:3]}-{placa[3:]}"
+
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+        # 1. Busca dados básicos do veículo (modelo, km atual)
+        dados_veiculo = {"placa": placa, "modelo": "", "km_atual": ""}
+        url_busca = f"{API_URL}/vehicle?LicensePlate={placa}"
+        resp_veh = get_blindado(url_busca, headers, rapido=True)
+        if resp_veh.status_code == 200:
+            veiculos = resp_veh.json().get("data", [])
+            if veiculos:
+                v = veiculos[0]
+                dados_veiculo["modelo"] = v.get("vehicleModelName") or v.get("modelName") or ""
+                km_val = v.get("currentOdometer") or v.get("odometer")
+                if km_val:
+                    dados_veiculo["km_atual"] = f"{int(km_val):,} km".replace(",", ".")
+
+        # 2. Busca histórico de ocorrências do veículo
+        url_oc = f"{API_URL}/contract-item-request/search?LicensePlate={placa}"
+        resp_oc = get_blindado(url_oc, headers)
+        if resp_oc.status_code != 200:
+            return dados_veiculo, [], "Não foi possível consultar as ocorrências do veículo na Blue Fleet."
+
+        ocorrencias = resp_oc.json().get("data", [])
+        if not ocorrencias:
+            return dados_veiculo, [], None
+
+        # Filtra apenas ocorrências de manutenção ou sinistro (onde existem O.S com peças/serviços)
+        # Reason IDs: 1 (Preventiva), 2 (Corretiva), 3 (Sinistro), 8 (Preparação)
+        manutencoes = [
+            oc for oc in ocorrencias 
+            if oc.get("contractItemRequestReasonId") in [1, 2, 3, 8]
+        ]
+
+        if not manutencoes:
+            return dados_veiculo, [], None
+
+        def extrair_pecas_ocorrencia(oc):
+            req_id = oc.get("contractItemRequestId")
+            r_det = requests.get(f"{API_URL}/contract-item-request/{req_id}", headers=headers, timeout=6)
+            if r_det.status_code != 200:
+                return []
+            det = r_det.json().get("data", {})
+            orders = det.get("contractItemRequestOrders", [])
+            itens_pecas = []
+
+            for ord_info in orders:
+                ord_id = ord_info.get("contractItemRequestOrderId")
+                r_ord = requests.get(f"{API_URL}/contract-item-request/{req_id}/order/{ord_id}", headers=headers, timeout=6)
+                if r_ord.status_code != 200:
+                    continue
+                order_data = r_ord.json().get("data", {})
+                km_raw = order_data.get("odometer") or det.get("currentOdometer")
+                try:
+                    km_fmt = f"{int(km_raw):,} km".replace(",", ".") if km_raw else "-"
+                    km_num = int(km_raw) if km_raw else 0
+                except Exception:
+                    km_fmt = f"{km_raw} km" if km_raw else "-"
+                    km_num = 0
+
+                dt_raw = order_data.get("createdAt") or det.get("createdAt") or ""
+                dt_fmt = formatar_data_br(dt_raw)
+
+                for item in order_data.get("orderItems", []):
+                    nome_peca = (item.get("partName") or item.get("description") or "").strip()
+                    if not nome_peca:
+                        continue
+                    
+                    qtd = item.get("quantity")
+                    nome_exibicao = nome_peca
+                    if qtd is not None:
+                        try:
+                            qtd_val = float(qtd)
+                            if qtd_val not in [0.0, 1.0]:
+                                qtd_str = f"{qtd_val:g}"
+                                nome_exibicao = f"{nome_peca} ({qtd_str})"
+                        except Exception:
+                            pass
+
+                    tipo_raw = str(item.get("contractItemRequestOrderItemPartTypeName") or "").upper()
+                    tipo_fmt = "Peça" if tipo_raw in ["PRODUTO", "PEÇA", "PECA", "PART"] else "Serviço"
+
+                    itens_pecas.append({
+                        "item": nome_exibicao,
+                        "tipo": tipo_fmt,
+                        "data": dt_fmt,
+                        "km": km_fmt,
+                        "_sort_dt": dt_raw,
+                        "_sort_km": km_num
+                    })
+            return itens_pecas
+
+        todas_pecas = []
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            resultados = executor.map(extrair_pecas_ocorrencia, manutencoes)
+            for res in resultados:
+                todas_pecas.extend(res)
+
+        # Ordena as peças pela data e KM mais recentes primeiro
+        todas_pecas.sort(key=lambda x: (x.get("_sort_dt", ""), x.get("_sort_km", 0)), reverse=True)
+
+        return dados_veiculo, todas_pecas, None
+
+    except Exception as e:
+        print(f"Erro ao consultar histórico de peças para {placa}: {e}")
+        return {"placa": placa, "modelo": "", "km_atual": ""}, [], f"Erro interno ao consultar: {str(e)}"
+

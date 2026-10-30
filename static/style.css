@@ -753,3 +753,64 @@ body.page-painel {
     background-color: #fee2e2;
     color: #b91c1c;
 }
+
+/* Estilos da Página Oficina / Peças */
+.table-oficina-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md);
+}
+
+.table-oficina {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    text-align: left;
+}
+
+.table-oficina th {
+    background-color: var(--slate-100);
+    color: var(--slate-600);
+    font-size: 0.70rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--slate-200);
+    white-space: nowrap;
+}
+
+.table-oficina td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--slate-200);
+    color: var(--navy-900);
+    vertical-align: middle;
+}
+
+.table-oficina tr:last-child td {
+    border-bottom: none;
+}
+
+.table-oficina tr:hover td {
+    background-color: #f8fafc;
+}
+
+.peca-nome {
+    font-weight: 700;
+    color: var(--navy-900);
+    line-height: 1.35;
+}
+
+.peca-km {
+    font-weight: 700;
+    color: var(--slate-700);
+    white-space: nowrap;
+}
+
+.peca-data {
+    color: var(--slate-600);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
