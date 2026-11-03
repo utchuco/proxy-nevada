@@ -6,15 +6,18 @@ oficina_bp = Blueprint("oficina", __name__)
 @oficina_bp.route("/oficina", methods=["GET", "POST"])
 def pagina_oficina():
     placa = ""
+    forcar = request.args.get("force", "").strip().lower() in ["1", "true"]
     if request.method == "POST":
         placa = request.form.get("placa", "").strip().upper()
+        if request.form.get("force", "").strip().lower() in ["1", "true"]:
+            forcar = True
     else:
         placa = request.args.get("placa", "").strip().upper()
 
     if not placa:
         return render_template("oficina.html", consultado=False)
 
-    dados_veiculo, pecas, erro = consultar_historico_pecas_veiculo(placa)
+    dados_veiculo, pecas, erro = consultar_historico_pecas_veiculo(placa, forcar_atualizacao=forcar)
 
     return render_template(
         "oficina.html",
@@ -27,7 +30,8 @@ def pagina_oficina():
 
 @oficina_bp.route("/oficina/api/consultar/<placa>", methods=["GET"])
 def api_consultar_oficina(placa):
-    dados_veiculo, pecas, erro = consultar_historico_pecas_veiculo(placa)
+    forcar = request.args.get("force", "").strip().lower() in ["1", "true"]
+    dados_veiculo, pecas, erro = consultar_historico_pecas_veiculo(placa, forcar_atualizacao=forcar)
     if erro:
         return jsonify({"isSuccess": False, "erro": erro}), 400
     return jsonify({

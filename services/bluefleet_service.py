@@ -5,6 +5,7 @@ import time
 import base64
 import threading
 import requests
+from requests.adapters import HTTPAdapter
 from datetime import datetime, timezone, timedelta
 
 CLIENT_ID = os.getenv("BLUEFLEET_CLIENT_ID")
@@ -14,6 +15,22 @@ API_URL = "https://api.bluefleet.com.br"
 
 _TOKEN_CACHE = {"token": None, "expires_at": 0}
 _token_lock = threading.Lock()
+
+_BLUEFLEET_SESSION = None
+_session_lock = threading.Lock()
+
+def get_bluefleet_session():
+    """Retorna uma sessão HTTP com pool de conexões persistentes para evitar overhead de SSL."""
+    global _BLUEFLEET_SESSION
+    if _BLUEFLEET_SESSION is None:
+        with _session_lock:
+            if _BLUEFLEET_SESSION is None:
+                s = requests.Session()
+                adapter = HTTPAdapter(pool_connections=15, pool_maxsize=15, max_retries=1)
+                s.mount("https://", adapter)
+                s.mount("http://", adapter)
+                _BLUEFLEET_SESSION = s
+    return _BLUEFLEET_SESSION
 
 def get_access_token():
     """Obtém o token de acesso da Blue Fleet com cache em memória seguro (thread-safe)."""
@@ -49,13 +66,14 @@ def get_access_token():
         _TOKEN_CACHE["expires_at"] = now + expires_in
         return token
 
-def get_blindado(url, headers, rapido=False):
+def get_blindado(url, headers, rapido=False, session=None):
     tentativas = 1 if rapido else 3
     tempo_limite = 3 if rapido else 5
+    req_engine = session or requests
     
     for _ in range(tentativas):
         try:
-            resp = requests.get(url, headers=headers, timeout=tempo_limite)
+            resp = req_engine.get(url, headers=headers, timeout=tempo_limite)
             if resp.status_code == 200:
                 return resp
             elif resp.status_code == 429:
@@ -63,10 +81,10 @@ def get_blindado(url, headers, rapido=False):
         except Exception:
             pass
         if not rapido:
-            time.sleep(0.5)
+            time.sleep(0.25)
     
     try:
-        return requests.get(url, headers=headers, timeout=tempo_limite)
+        return req_engine.get(url, headers=headers, timeout=tempo_limite)
     except Exception:
         resp_erro = requests.Response()
         resp_erro.status_code = 500
@@ -823,30 +841,33 @@ def formatar_data_br(data_iso):
 
 _OFICINA_CACHE = {}
 _OFICINA_CACHE_LOCK = threading.Lock()
+_CACHE_TTL_OFICINA = 600  # 10 minutos de cache para navegação instantânea e economia de recursos
 
-def consultar_historico_pecas_veiculo(placa):
-    """Consulta todas as peças e serviços já realizados no veículo na Blue Fleet de forma robusta e com cache."""
+def consultar_historico_pecas_veiculo(placa, forcar_atualizacao=False):
+    """Consulta todas as peças e serviços já realizados no veículo na Blue Fleet de forma otimizada e com cache."""
     placa_raw = (placa or "").strip().upper()
     placa_limpa = placa_raw.replace("-", "").replace(" ", "")
     placa_com_hifen = f"{placa_limpa[:3]}-{placa_limpa[3:]}" if len(placa_limpa) == 7 else placa_limpa
 
-    # Verifica cache em memória (TTL: 90 segundos para respostas rápidas e sem flutuação)
+    # Verifica cache em memória (TTL: 10 minutos) se não foi solicitada atualização forçada
     now = time.time()
     cache_key = placa_limpa
-    with _OFICINA_CACHE_LOCK:
-        if cache_key in _OFICINA_CACHE:
-            cached_data, cached_time = _OFICINA_CACHE[cache_key]
-            if now - cached_time < 90:
-                return cached_data["dados_veiculo"], cached_data["pecas"], cached_data["erro"]
+    if not forcar_atualizacao:
+        with _OFICINA_CACHE_LOCK:
+            if cache_key in _OFICINA_CACHE:
+                cached_data, cached_time = _OFICINA_CACHE[cache_key]
+                if now - cached_time < _CACHE_TTL_OFICINA:
+                    return cached_data["dados_veiculo"], cached_data["pecas"], cached_data["erro"]
 
     try:
+        session = get_bluefleet_session()
         token = get_access_token()
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
         # 1. Busca dados básicos do veículo (modelo, km atual)
         dados_veiculo = {"placa": placa_com_hifen, "modelo": "", "km_atual": ""}
         url_busca = f"{API_URL}/vehicle?LicensePlate={placa_com_hifen}"
-        resp_veh = get_blindado(url_busca, headers, rapido=True)
+        resp_veh = get_blindado(url_busca, headers, rapido=True, session=session)
         if resp_veh.status_code == 200:
             veiculos = resp_veh.json().get("data", [])
             if veiculos:
@@ -861,13 +882,13 @@ def consultar_historico_pecas_veiculo(placa):
 
         # 2. Busca histórico de ocorrências do veículo (tenta com hífen e fallback sem hífen se vazio)
         url_oc = f"{API_URL}/contract-item-request/search?LicensePlate={placa_com_hifen}"
-        resp_oc = get_blindado(url_oc, headers)
+        resp_oc = get_blindado(url_oc, headers, session=session)
         ocorrencias = []
         if resp_oc.status_code == 200:
             ocorrencias = resp_oc.json().get("data", [])
         
         if not ocorrencias and placa_limpa != placa_com_hifen:
-            resp_oc_limpa = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_limpa}", headers)
+            resp_oc_limpa = get_blindado(f"{API_URL}/contract-item-request/search?LicensePlate={placa_limpa}", headers, session=session)
             if resp_oc_limpa.status_code == 200:
                 ocorrencias = resp_oc_limpa.json().get("data", [])
 
@@ -880,10 +901,13 @@ def consultar_historico_pecas_veiculo(placa):
                 _OFICINA_CACHE[cache_key] = ({"dados_veiculo": dados_veiculo, "pecas": [], "erro": None}, now)
             return resultado
 
-        # Exclui apenas ocorrências que notoriamente nunca possuem O.S de manutenção (4: Infração, 6: Devolução)
+        # Exclui ocorrências que comprovadamente nunca possuem peças/OS de manutenção:
+        # 4: Infração, 5: Carro Reserva, 6: Devolução
+        # E ocorrências canceladas
         candidatas = [
             oc for oc in ocorrencias 
-            if oc.get("contractItemRequestReasonId") not in [4, 6]
+            if oc.get("contractItemRequestReasonId") not in [4, 5, 6]
+            and str(oc.get("contractItemRequestStatusName", "")).strip().lower() not in ["cancelada", "cancelado"]
         ]
 
         if not candidatas:
@@ -897,8 +921,8 @@ def consultar_historico_pecas_veiculo(placa):
             if not req_id:
                 return []
             
-            # Utiliza get_blindado com retry automático para não perder requisições por rate limit (429)
-            r_det = get_blindado(f"{API_URL}/contract-item-request/{req_id}", headers)
+            # Utiliza get_blindado com pool de sessão e retry automático para resposta rápida e segura
+            r_det = get_blindado(f"{API_URL}/contract-item-request/{req_id}", headers, session=session)
             if r_det.status_code != 200:
                 return []
             det = r_det.json().get("data", {})
@@ -909,7 +933,7 @@ def consultar_historico_pecas_veiculo(placa):
                 ord_id = ord_info.get("contractItemRequestOrderId")
                 if not ord_id:
                     continue
-                r_ord = get_blindado(f"{API_URL}/contract-item-request/{req_id}/order/{ord_id}", headers)
+                r_ord = get_blindado(f"{API_URL}/contract-item-request/{req_id}/order/{ord_id}", headers, session=session)
                 if r_ord.status_code != 200:
                     continue
                 order_data = r_ord.json().get("data", {})
@@ -955,8 +979,8 @@ def consultar_historico_pecas_veiculo(placa):
 
         todas_pecas = []
         from concurrent.futures import ThreadPoolExecutor
-        # Limita para 3 workers para evitar rate limit simultâneo da API da Blue Fleet
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        # Conexões reaproveitadas permitem até 4 workers seguros sem estourar rate limit da Blue Fleet
+        with ThreadPoolExecutor(max_workers=4) as executor:
             resultados = executor.map(extrair_pecas_ocorrencia, candidatas)
             for res in resultados:
                 todas_pecas.extend(res)
@@ -970,8 +994,12 @@ def consultar_historico_pecas_veiculo(placa):
             if max_km > 0:
                 dados_veiculo["km_atual"] = f"{max_km:,} km".replace(",", ".")
 
-        # Salva em cache
+        # Salva em cache e purga itens antigos se a lista exceder 150 placas
         with _OFICINA_CACHE_LOCK:
+            if len(_OFICINA_CACHE) > 150:
+                chaves_antigas = [k for k, (_, t_salvo) in _OFICINA_CACHE.items() if now - t_salvo > _CACHE_TTL_OFICINA]
+                for k in chaves_antigas:
+                    _OFICINA_CACHE.pop(k, None)
             _OFICINA_CACHE[cache_key] = ({"dados_veiculo": dados_veiculo, "pecas": todas_pecas, "erro": None}, now)
 
         return dados_veiculo, todas_pecas, None

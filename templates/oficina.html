@@ -29,11 +29,9 @@
                 Digite a placa para consultar o histórico de peças e manutenções já realizadas
             </p>
 
-            {% if erro %}
-            <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.85rem; color: #991b1b; font-weight: 600; text-align: left;">
-                {{ erro }}
+            <div id="boxErro" style="{% if not erro %}display: none;{% endif %} background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 0.85rem; color: #991b1b; font-weight: 600; text-align: left;">
+                {{ erro if erro else '' }}
             </div>
-            {% endif %}
 
             <form id="formBuscaOficina" action="/oficina" method="POST">
                 <div class="input-placa-wrapper">
@@ -46,101 +44,121 @@
                 </div>
 
                 <button type="submit" id="btnBuscar" class="btn-primary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg id="iconeBuscar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <span>Localizar Peças</span>
+                    <span id="txtBtnBuscar">Localizar Peças</span>
                 </button>
             </form>
         </div>
 
-        {% if consultado and not erro %}
-        <!-- Card de Dados do Veículo -->
-        <div class="card-container">
-            <div class="card-header-flex">
-                <div>
-                    <span class="brand-badge" style="background-color: #0f172a; color: #ffffff; font-size: 0.82rem; padding: 5px 12px; letter-spacing: 1.5px;">
-                        {{ veiculo.placa }}
+        <!-- Card de Carregamento com Feedback Visual em Tempo Real -->
+        <div id="loadingOficina" class="card-container" style="display: none; text-align: center; padding: 36px 20px;">
+            <div class="spinner-oficina" style="margin: 0 auto 16px;"></div>
+            <h3 style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">
+                Consultando histórico na Blue Fleet...
+            </h3>
+            <p style="font-size: 0.84rem; color: #64748b; margin-bottom: 18px; line-height: 1.45;">
+                Varrendo ordens de serviço, manutenções e peças do veículo.<br>
+                <span style="font-size: 0.78rem; color: #94a3b8;">Isso leva apenas alguns instantes.</span>
+            </p>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill"></div>
+            </div>
+        </div>
+
+        <!-- Container com os Resultados da Consulta -->
+        <div id="resultadoOficina" style="{% if not (consultado and not erro) %}display: none;{% endif %}">
+            <!-- Card de Dados do Veículo -->
+            <div class="card-container">
+                <div class="card-header-flex">
+                    <div>
+                        <span id="badgePlaca" class="brand-badge" style="background-color: #0f172a; color: #ffffff; font-size: 0.82rem; padding: 5px 12px; letter-spacing: 1.5px;">
+                            {{ veiculo.placa if veiculo else '' }}
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button type="button" id="btnAtualizarAoVivo" class="btn-atualizar-ao-vivo" title="Forçar busca ao vivo ignorando o cache">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                            </svg>
+                            <span>Atualizar ao vivo</span>
+                        </button>
+                        <a href="/oficina" style="font-size: 0.78rem; font-weight: 700; color: #2563eb; text-decoration: none;">
+                            Nova Consulta
+                        </a>
+                    </div>
+                </div>
+
+                <div id="veiculoModelo" class="vehicle-model-title" style="margin-top: 6px; {% if not (veiculo and veiculo.modelo) %}display: none;{% endif %}">
+                    {{ veiculo.modelo if (veiculo and veiculo.modelo) else '' }}
+                </div>
+
+                <div class="spec-grid" style="margin-bottom: 0;">
+                    <div class="spec-item">
+                        <span class="spec-label">KM Atual</span>
+                        <span id="veiculoKm" class="spec-value">{{ veiculo.km_atual if (veiculo and veiculo.km_atual) else 'Não informado' }}</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Total de Registros</span>
+                        <span id="veiculoTotal" class="spec-value">{{ pecas|length if pecas else 0 }} itens</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabela de Peças e Serviços -->
+            <div class="card-container" style="padding: 0;">
+                <div style="padding: 14px 16px; border-bottom: 1px solid var(--slate-200); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="font-size: 0.90rem; font-weight: 800; color: #0f172a;">
+                        Histórico de Peças e Serviços
                     </span>
+                    <input type="text" id="filtroRapido" placeholder="Filtrar peça (ex: óleo, pastilha)..." 
+                           style="font-size: 0.80rem; padding: 6px 12px; border: 1px solid var(--slate-200); border-radius: var(--radius-sm); outline: none; width: 220px; max-width: 100%;">
                 </div>
-                <a href="/oficina" style="font-size: 0.78rem; font-weight: 700; color: #2563eb; text-decoration: none;">
-                    Nova Consulta
-                </a>
-            </div>
 
-            {% if veiculo.modelo %}
-            <div class="vehicle-model-title" style="margin-top: 6px;">
-                {{ veiculo.modelo }}
-            </div>
-            {% endif %}
-
-            <div class="spec-grid" style="margin-bottom: 0;">
-                <div class="spec-item">
-                    <span class="spec-label">KM Atual</span>
-                    <span class="spec-value">{{ veiculo.km_atual if veiculo.km_atual else 'Não informado' }}</span>
+                <div id="wrapperTabelaPecas" class="table-oficina-wrapper" style="{% if not pecas %}display: none;{% endif %}">
+                    <table class="table-oficina" id="tabelaPecas">
+                        <thead>
+                            <tr>
+                                <th>Peça / Item</th>
+                                <th style="width: 90px; text-align: center;">Tipo</th>
+                                <th style="width: 110px;">Data da Troca</th>
+                                <th style="width: 120px;">KM da Troca</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpoTabelaPecas">
+                            {% if pecas %}
+                            {% for p in pecas %}
+                            <tr>
+                                <td>
+                                    <span class="peca-nome">{{ p.item }}</span>
+                                </td>
+                                <td style="text-align: center;">
+                                    {% if p.tipo == 'Peça' %}
+                                    <span class="status-pill status-pill-green" style="max-width: 100%;">Peça</span>
+                                    {% else %}
+                                    <span class="status-pill status-pill-blue" style="max-width: 100%;">Serviço</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="peca-data">{{ p.data }}</span>
+                                </td>
+                                <td>
+                                    <span class="peca-km">{{ p.km }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% endif %}
+                        </tbody>
+                    </table>
                 </div>
-                <div class="spec-item">
-                    <span class="spec-label">Total de Registros</span>
-                    <span class="spec-value">{{ pecas|length }} itens</span>
+
+                <div id="avisoSemPecas" style="{% if pecas %}display: none;{% endif %} padding: 24px 16px; text-align: center; color: var(--slate-500); font-size: 0.88rem; font-weight: 500;">
+                    Nenhuma peça ou serviço registrado para este veículo na Blue Fleet.
                 </div>
             </div>
         </div>
-
-        <!-- Tabela de Peças e Serviços -->
-        <div class="card-container" style="padding: 0;">
-            <div style="padding: 14px 16px; border-bottom: 1px solid var(--slate-200); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <span style="font-size: 0.90rem; font-weight: 800; color: #0f172a;">
-                    Histórico de Peças e Serviços
-                </span>
-                {% if pecas %}
-                <input type="text" id="filtroRapido" placeholder="Filtrar peça (ex: óleo, pastilha)..." 
-                       style="font-size: 0.80rem; padding: 6px 12px; border: 1px solid var(--slate-200); border-radius: var(--radius-sm); outline: none; width: 220px; max-width: 100%;">
-                {% endif %}
-            </div>
-
-            {% if pecas %}
-            <div class="table-oficina-wrapper">
-                <table class="table-oficina" id="tabelaPecas">
-                    <thead>
-                        <tr>
-                            <th>Peça / Item</th>
-                            <th style="width: 90px; text-align: center;">Tipo</th>
-                            <th style="width: 110px;">Data da Troca</th>
-                            <th style="width: 120px;">KM da Troca</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in pecas %}
-                        <tr>
-                            <td>
-                                <span class="peca-nome">{{ p.item }}</span>
-                            </td>
-                            <td style="text-align: center;">
-                                {% if p.tipo == 'Peça' %}
-                                <span class="status-pill status-pill-green" style="max-width: 100%;">Peça</span>
-                                {% else %}
-                                <span class="status-pill status-pill-blue" style="max-width: 100%;">Serviço</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="peca-data">{{ p.data }}</span>
-                            </td>
-                            <td>
-                                <span class="peca-km">{{ p.km }}</span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div style="padding: 24px 16px; text-align: center; color: var(--slate-500); font-size: 0.88rem; font-weight: 500;">
-                Nenhuma peça ou serviço registrado para este veículo na Blue Fleet.
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
 
         <p style="text-align: center; font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: 14px;">
             Locadora Nevada &bull; Gestão Inteligente de Frotas
@@ -150,8 +168,18 @@
     <script>
         const inputPlaca = document.getElementById('inputPlaca');
         const listaSugestoes = document.getElementById('listaSugestoes');
+        const formBuscaOficina = document.getElementById('formBuscaOficina');
+        const btnBuscar = document.getElementById('btnBuscar');
+        const txtBtnBuscar = document.getElementById('txtBtnBuscar');
+        const loadingOficina = document.getElementById('loadingOficina');
+        const resultadoOficina = document.getElementById('resultadoOficina');
+        const boxErro = document.getElementById('boxErro');
+        const btnAtualizarAoVivo = document.getElementById('btnAtualizarAoVivo');
+        const filtroRapido = document.getElementById('filtroRapido');
         let timeoutBusca = null;
+        let placaAtual = "{{ placa if placa else '' }}";
 
+        // Formatação inteligente da placa com autocompletar
         if (inputPlaca) {
             inputPlaca.addEventListener('input', function (e) {
                 var valor = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -185,7 +213,7 @@
                                     li.onclick = function() {
                                         inputPlaca.value = placa; 
                                         listaSugestoes.style.display = 'none'; 
-                                        document.getElementById('btnBuscar').click(); 
+                                        consultarPecasDinamico(placa, false);
                                     };
                                     
                                     listaSugestoes.appendChild(li);
@@ -209,29 +237,159 @@
             });
         }
 
-        const formBuscaOficina = document.getElementById('formBuscaOficina');
+        // Consulta dinâmica assíncrona com tela de carregamento amigável
+        async function consultarPecasDinamico(placa, forcarAtualizacao = false) {
+            const placaFormatada = (placa || inputPlaca.value).trim().toUpperCase();
+            if (!placaFormatada) return;
+
+            // 1. Oculta erros anteriores e resultados antigos
+            boxErro.style.display = 'none';
+            boxErro.textContent = '';
+            resultadoOficina.style.display = 'none';
+
+            // 2. Exibe o card animado de carregamento
+            loadingOficina.style.display = 'block';
+
+            // 3. Altera estado do botão para indicar carregamento
+            btnBuscar.disabled = true;
+            btnBuscar.style.pointerEvents = 'none';
+            btnBuscar.style.backgroundColor = '#475569';
+            btnBuscar.innerHTML = '<span class="btn-spinner"></span><span>Consultando peças...</span>';
+
+            try {
+                const url = '/oficina/api/consultar/' + encodeURIComponent(placaFormatada) + (forcarAtualizacao ? '?force=1' : '');
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (!resp.ok || !data.isSuccess) {
+                    throw new Error(data.erro || 'Falha ao consultar histórico de peças deste veículo.');
+                }
+
+                // Armazena a placa atual para botão de atualização ao vivo
+                placaAtual = data.veiculo.placa || placaFormatada;
+                inputPlaca.value = placaAtual;
+
+                // Atualiza a URL do navegador suavemente sem recarregar
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({}, '', '/oficina?placa=' + encodeURIComponent(placaAtual));
+                }
+
+                // Preenche dados do veículo
+                document.getElementById('badgePlaca').textContent = data.veiculo.placa || placaAtual;
+                const elModelo = document.getElementById('veiculoModelo');
+                if (data.veiculo.modelo) {
+                    elModelo.textContent = data.veiculo.modelo;
+                    elModelo.style.display = 'block';
+                } else {
+                    elModelo.style.display = 'none';
+                }
+
+                document.getElementById('veiculoKm').textContent = data.veiculo.km_atual || 'Não informado';
+                document.getElementById('veiculoTotal').textContent = (data.total || (data.pecas ? data.pecas.length : 0)) + ' itens';
+
+                // Preenche a tabela de peças
+                const corpoTabela = document.getElementById('corpoTabelaPecas');
+                const wrapperTabela = document.getElementById('wrapperTabelaPecas');
+                const avisoSemPecas = document.getElementById('avisoSemPecas');
+                corpoTabela.innerHTML = '';
+
+                if (data.pecas && data.pecas.length > 0) {
+                    data.pecas.forEach(p => {
+                        const tr = document.createElement('tr');
+                        
+                        const tdItem = document.createElement('td');
+                        tdItem.innerHTML = '<span class="peca-nome">' + escapeHtml(p.item) + '</span>';
+                        
+                        const tdTipo = document.createElement('td');
+                        tdTipo.style.textAlign = 'center';
+                        const isPeca = p.tipo === 'Peça';
+                        tdTipo.innerHTML = '<span class="status-pill ' + (isPeca ? 'status-pill-green' : 'status-pill-blue') + '" style="max-width: 100%;">' + escapeHtml(p.tipo) + '</span>';
+                        
+                        const tdData = document.createElement('td');
+                        tdData.innerHTML = '<span class="peca-data">' + escapeHtml(p.data) + '</span>';
+                        
+                        const tdKm = document.createElement('td');
+                        tdKm.innerHTML = '<span class="peca-km">' + escapeHtml(p.km) + '</span>';
+
+                        tr.appendChild(tdItem);
+                        tr.appendChild(tdTipo);
+                        tr.appendChild(tdData);
+                        tr.appendChild(tdKm);
+                        corpoTabela.appendChild(tr);
+                    });
+
+                    wrapperTabela.style.display = 'block';
+                    avisoSemPecas.style.display = 'none';
+                } else {
+                    wrapperTabela.style.display = 'none';
+                    avisoSemPecas.style.display = 'block';
+                }
+
+                // Limpa o filtro de busca rápida
+                if (filtroRapido) filtroRapido.value = '';
+
+                // Oculta loading e exibe resultado
+                loadingOficina.style.display = 'none';
+                resultadoOficina.style.display = 'block';
+
+            } catch (err) {
+                console.error("Erro na busca:", err);
+                loadingOficina.style.display = 'none';
+                boxErro.textContent = err.message || 'Erro inesperado ao consultar histórico.';
+                boxErro.style.display = 'block';
+            } finally {
+                // Restaura o botão de busca
+                btnBuscar.disabled = false;
+                btnBuscar.style.pointerEvents = 'auto';
+                btnBuscar.style.backgroundColor = '';
+                btnBuscar.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <span>Localizar Peças</span>
+                `;
+            }
+        }
+
+        // Submissão do formulário interceptada para consulta via AJAX
         if (formBuscaOficina) {
-            formBuscaOficina.addEventListener('submit', function() {
-                var btn = document.getElementById('btnBuscar');
-                btn.innerHTML = '<span>Consultando peças...</span>';
-                btn.style.backgroundColor = '#475569';
-                btn.style.pointerEvents = 'none';
+            formBuscaOficina.addEventListener('submit', function(e) {
+                e.preventDefault();
+                consultarPecasDinamico(inputPlaca.value, false);
             });
         }
 
-        // Filtro em tempo real para o mecânico na tabela
-        const filtroRapido = document.getElementById('filtroRapido');
+        // Botão para forçar atualização ao vivo ignorando o cache
+        if (btnAtualizarAoVivo) {
+            btnAtualizarAoVivo.addEventListener('click', function() {
+                if (placaAtual) {
+                    consultarPecasDinamico(placaAtual, true);
+                }
+            });
+        }
+
+        // Filtro em tempo real na tabela
         if (filtroRapido) {
             filtroRapido.addEventListener('input', function(e) {
                 const termo = e.target.value.toLowerCase().trim();
-                const linhas = document.querySelectorAll('#tabelaPecas tbody tr');
+                const linhas = document.querySelectorAll('#corpoTabelaPecas tr');
                 linhas.forEach(linha => {
                     const texto = linha.textContent.toLowerCase();
                     linha.style.display = texto.includes(termo) ? '' : 'none';
                 });
             });
         }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
     </script>
 </body>
 </html>
-
