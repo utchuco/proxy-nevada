@@ -787,21 +787,39 @@ def anexar_arquivo_ocorrencia(contract_item_request_id, nome_arquivo, pdf_bytes)
     return resp.status_code in [200, 201], resp.text
 
 def formatar_data_br(data_iso):
-    """Converte ISO timestamp ou string de data para DD/MM/AAAA."""
+    """Converte ISO timestamp ou string de data para DD/MM/AAAA de forma ultrarrápida e tolerante."""
     if not data_iso:
         return "-"
-    try:
-        clean = str(data_iso).replace("Z", "")
-        if "T" in clean:
-            dt = datetime.fromisoformat(clean)
-            return dt.strftime("%d/%m/%Y")
-        elif "-" in clean:
-            partes = clean.split("-")
-            if len(partes) >= 3:
-                return f"{partes[2][:2]}/{partes[1]}/{partes[0]}"
-    except Exception:
-        pass
-    return str(data_iso)[:10]
+    s = str(data_iso).strip()
+    if len(s) < 8:
+        return s
+
+    # Formato ISO comum: YYYY-MM-DD... (ex: 2026-10-23T16:38:38.02Z ou 2026-10-23)
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        ano, mes, dia = s[:4], s[5:7], s[8:10]
+        if ano.isdigit() and mes.isdigit() and dia.isdigit():
+            return f"{dia}/{mes}/{ano}"
+
+    # Formato YYYY/MM/DD
+    if len(s) >= 10 and s[4] == "/" and s[7] == "/":
+        ano, mes, dia = s[:4], s[5:7], s[8:10]
+        if ano.isdigit() and mes.isdigit() and dia.isdigit():
+            return f"{dia}/{mes}/{ano}"
+
+    # Já está em DD/MM/YYYY
+    if len(s) >= 10 and s[2] == "/" and s[5] == "/":
+        return s[:10]
+
+    # Fallback para split por hífen (ex: YYYY-MM-DD ou DD-MM-YYYY)
+    if "-" in s:
+        partes = s[:10].split("-")
+        if len(partes) == 3:
+            if len(partes[0]) == 4 and partes[0].isdigit():
+                return f"{partes[2]:0>2}/{partes[1]:0>2}/{partes[0]}"
+            elif len(partes[2]) == 4 and partes[2].isdigit():
+                return f"{partes[0]:0>2}/{partes[1]:0>2}/{partes[2]}"
+
+    return s[:10]
 
 _OFICINA_CACHE = {}
 _OFICINA_CACHE_LOCK = threading.Lock()
