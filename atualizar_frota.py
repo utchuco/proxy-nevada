@@ -22,15 +22,53 @@ def atualizar_cache():
         credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
         headers_auth = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
         }
         
-        res_auth = requests.post(AUTH_URL, headers=headers_auth, data={"grant_type": "client_credentials"})
-        res_auth.raise_for_status()
-        token = res_auth.json().get("access_token")
+        token = None
+        for tentativa in range(3):
+            try:
+                res_auth = requests.post(AUTH_URL, headers=headers_auth, data={"grant_type": "client_credentials"}, timeout=10)
+                if res_auth.status_code == 200:
+                    token = res_auth.json().get("access_token")
+                    break
+            except Exception as e:
+                print(f"Tentativa {tentativa+1} com Header Basic falhou: {e}")
 
-        headers_api = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+            time.sleep(0.5)
+
+            try:
+                headers_fallback = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json"
+                }
+                data_fallback = {
+                    "grant_type": "client_credentials",
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET
+                }
+                res_auth = requests.post(AUTH_URL, headers=headers_fallback, data=data_fallback, timeout=10)
+                if res_auth.status_code == 200:
+                    token = res_auth.json().get("access_token")
+                    break
+            except Exception as e:
+                print(f"Tentativa {tentativa+1} com Body falhou: {e}")
+
+            time.sleep(1)
+
+        if not token:
+            print("ERRO de rede ou API: Não foi possível obter token de acesso da Blue Fleet.")
+            return
+
+        headers_api = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
         
         offset = 0 
         count = 100

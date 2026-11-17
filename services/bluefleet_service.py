@@ -13,6 +13,8 @@ CLIENT_SECRET = os.getenv("BLUEFLEET_CLIENT_SECRET")
 AUTH_URL = "https://auth.bluefleet.com.br/connect/token"
 API_URL = "https://api.bluefleet.com.br"
 
+BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
 _TOKEN_CACHE = {"token": None, "expires_at": 0}
 _token_lock = threading.Lock()
 
@@ -20,20 +22,25 @@ _BLUEFLEET_SESSION = None
 _session_lock = threading.Lock()
 
 def get_bluefleet_session():
-    """Retorna uma sessão HTTP com pool de conexões persistentes para evitar overhead de SSL."""
+    """Retorna uma sessão HTTP com pool de conexões persistentes para evitar overhead de SSL e com User-Agent blindado."""
     global _BLUEFLEET_SESSION
     if _BLUEFLEET_SESSION is None:
         with _session_lock:
             if _BLUEFLEET_SESSION is None:
                 s = requests.Session()
-                adapter = HTTPAdapter(pool_connections=15, pool_maxsize=15, max_retries=1)
+                s.headers.update({
+                    "User-Agent": BROWSER_USER_AGENT,
+                    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Accept": "application/json, text/plain, */*"
+                })
+                adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=1)
                 s.mount("https://", adapter)
                 s.mount("http://", adapter)
                 _BLUEFLEET_SESSION = s
     return _BLUEFLEET_SESSION
 
 def get_access_token():
-    """Obtém o token de acesso da Blue Fleet com cache em memória seguro (thread-safe)."""
+    """Obtém o token de acesso da Blue Fleet com cache em memória seguro e blindagem contra 403 WAF."""
     now = time.time()
     # Retorna do cache em memória se ainda for válido por pelo menos mais 60 segundos
     if _TOKEN_CACHE["token"] and now < (_TOKEN_CACHE["expires_at"] - 60):
@@ -51,25 +58,78 @@ def get_access_token():
 
         credentials = f"{client_id}:{client_secret}"
         encoded = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        data = {"grant_type": "client_credentials"}
-        response = requests.post(AUTH_URL, headers=headers, data=data, timeout=10)
-        response.raise_for_status()
-        res_json = response.json()
-        token = res_json.get("access_token")
-        expires_in = int(res_json.get("expires_in") or 3600)
 
-        _TOKEN_CACHE["token"] = token
-        _TOKEN_CACHE["expires_at"] = now + expires_in
-        return token
+        headers_basic = {
+            "User-Agent": BROWSER_USER_AGENT,
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        }
+        data_basic = {"grant_type": "client_credentials"}
+
+        headers_body = {
+            "User-Agent": BROWSER_USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        }
+        data_body = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret
+        }
+
+        session = get_bluefleet_session()
+        last_error = None
+
+        for tentativa in range(3):
+            # 1. Tenta autenticação padrão OAuth2 via Header Basic
+            try:
+                response = session.post(AUTH_URL, headers=headers_basic, data=data_basic, timeout=10)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    token = res_json.get("access_token")
+                    expires_in = int(res_json.get("expires_in") or 3600)
+                    _TOKEN_CACHE["token"] = token
+                    _TOKEN_CACHE["expires_at"] = now + expires_in
+                    return token
+                elif response.status_code == 403:
+                    print(f"[get_access_token] Tentativa {tentativa+1}: 403 no Header Basic, tentando método body...")
+            except Exception as e:
+                last_error = e
+                print(f"[get_access_token] Tentativa {tentativa+1} com Header Basic falhou: {e}")
+
+            time.sleep(0.4)
+
+            # 2. Tenta autenticação alternativa via Body (fallback caso AWS ALB/WAF filtre header Authorization)
+            try:
+                response = session.post(AUTH_URL, headers=headers_body, data=data_body, timeout=10)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    token = res_json.get("access_token")
+                    expires_in = int(res_json.get("expires_in") or 3600)
+                    _TOKEN_CACHE["token"] = token
+                    _TOKEN_CACHE["expires_at"] = now + expires_in
+                    return token
+                elif response.status_code == 403:
+                    print(f"[get_access_token] Tentativa {tentativa+1}: 403 no método body...")
+                else:
+                    response.raise_for_status()
+            except Exception as e:
+                last_error = e
+                print(f"[get_access_token] Tentativa {tentativa+1} com Body falhou: {e}")
+
+            time.sleep(0.8)
+
+        if last_error:
+            raise last_error
+        response.raise_for_status()
 
 def get_blindado(url, headers, rapido=False, session=None):
     tentativas = 1 if rapido else 3
     tempo_limite = 3 if rapido else 5
     req_engine = session or requests
+    if headers and "User-Agent" not in headers:
+        headers["User-Agent"] = BROWSER_USER_AGENT
     
     for _ in range(tentativas):
         try:
